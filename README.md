@@ -32,7 +32,8 @@ acento lima `#D9F84A`, vista previa tipo comprobante).
 1. Crea una hoja de cálculo y una carpeta de Drive para las firmas; copia sus IDs.
 2. En la hoja: **Extensiones → Apps Script**, pega `apps-script/Code.gs`.
 3. **Configuración del proyecto → Propiedades del script**:
-   `GOOGLE_CLIENT_ID`, `ALLOWED_EMAILS`, `SHEET_ID`, `DRIVE_FOLDER_ID`
+   `GOOGLE_CLIENT_ID`, `SHEET_ID`, `DRIVE_FOLDER_ID` y los correos autorizados:
+   `ALLOWED_EMAILS` (separados por coma) o una propiedad por correo (`ALLOWED_EMAIL1`, `ALLOWED_EMAIL2`…)
    (y `SHEETS_WEBHOOK_TOKEN` solo al activar cobros).
 4. Ejecuta `autorizarPermisos` una vez.
 5. **Implementar → Nueva implementación → Aplicación web**: ejecutar como *Yo*, acceso *Cualquier persona*.
