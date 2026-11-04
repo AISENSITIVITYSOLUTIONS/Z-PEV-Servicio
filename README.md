@@ -1,58 +1,72 @@
-# Orden de servicio · Z e-Scooters MX
+# Z-PEV Servicio
 
-Formulario y firma digital de la orden de servicio. Cada orden se guarda en Google Sheets
-(hoja **Órdenes**) con folio, datos del vehículo, pagos y un enlace a la firma en Drive.
+Orden de servicio de **Z e-Scooters México**: recepción del vehículo, contrato de prestación
+de servicios, firma digital del cliente y registro automático en Google Sheets. Base del
+futuro CRM/ERP del taller.
 
-Stack: Vite + JavaScript + three.js (logo 3D) + Google Apps Script (backend).
+Diseño con el sistema visual de **FacturAI** (Geist / Geist Mono, paper `#F3F2EE`, rail ink,
+acento lima `#D9F84A`, vista previa tipo comprobante).
 
-## 1. Backend en Google Sheets
+## Qué hace
 
-1. Crea una hoja de cálculo en Google Sheets (cualquier nombre). Copia su **ID**
-   (el tramo entre `/d/` y `/edit` en la URL).
-2. Crea una carpeta en Drive para las firmas y copia su **ID** (el final de la URL de la carpeta).
-3. En la hoja: **Extensiones → Apps Script**. Borra el contenido y pega `apps-script/Code.gs`.
-4. **Configuración del proyecto → Propiedades del script → Agregar**:
-   - `GOOGLE_CLIENT_ID` → ID de cliente OAuth (ver sección 1b).
-   - `ALLOWED_EMAILS` → correos autorizados, separados por coma (ej. `ana@x.mx,luis@x.mx`).
-   - `SHEET_ID` → ID de la hoja.
-   - `DRIVE_FOLDER_ID` → ID de la carpeta.
-5. En el editor, selecciona la función `autorizarPermisos` y ejecútala una vez para aceptar permisos.
-6. **Implementar → Nueva implementación → Tipo: Aplicación web**.
-   - Ejecutar como: **Yo**.
-   - Quién tiene acceso: **Cualquier persona**.
-   - Copia la URL que termina en `/exec`.
+- **Acceso con Google**: solo correos en `ALLOWED_EMAILS`; verificación del ID token en el servidor.
+- **Nueva orden**: cliente, vehículo, servicio, accesorios, presupuesto, anticipo y saldo calculado.
+  Vista previa en vivo, checklist y borrador guardado en el navegador.
+- **Términos y condiciones** completos (cláusulas PRIMERA a DÉCIMA NOVENA); la casilla se habilita
+  al leer hasta el final.
+- **Firma digital** en una placa 3D, exportada como PNG a Drive.
+- **Historial**: últimas órdenes, búsqueda, totales (anticipos y saldo por cobrar), enlace a la firma
+  y aviso al cliente por WhatsApp.
+- **Cobro del anticipo con Mercado Pago**: integrado y **oculto**; ver `docs/MERCADO_PAGO.md`.
 
-## 1b. Inicio de sesión con Google (Google Cloud Console)
+## Arquitectura
 
-1. Google Cloud Console → **APIs y servicios → Pantalla de consentimiento de OAuth**: tipo *Externo*, nombre
-   «Orden de servicio · Z e-Scooters», correo de soporte. Estado de publicación: *En producción* o agrega los usuarios de prueba.
-2. **Credenciales → Crear credenciales → ID de cliente de OAuth → Aplicación web**.
-   - Orígenes de JavaScript autorizados: la URL donde publicarás la app (ej. `https://orden.zescootersmx.com`) y `http://localhost:5173` para desarrollo.
-3. Copia el ID de cliente en `VITE_GOOGLE_CLIENT_ID` (frontend) y en la propiedad `GOOGLE_CLIENT_ID` (Apps Script). Es el mismo valor.
+| Pieza | Dónde | Función |
+|---|---|---|
+| Frontend | Vite + JS + three.js → Firebase Hosting | Formulario, firma, historial |
+| Registro | Google Apps Script + Sheets + Drive | Folio `ZE-AAAAMMDD-NNNN`, filas, firmas |
+| Cobros | Firebase Function `billing` (Node 22) | Checkout Pro + webhook firmado |
 
-## 2. Frontend
+## 1. Google Sheets y Apps Script
 
-```bash
-cp .env.example .env          # pega tu URL de /exec en VITE_API_URL
+1. Crea una hoja de cálculo y una carpeta de Drive para las firmas; copia sus IDs.
+2. En la hoja: **Extensiones → Apps Script**, pega `apps-script/Code.gs`.
+3. **Configuración del proyecto → Propiedades del script**:
+   `GOOGLE_CLIENT_ID`, `ALLOWED_EMAILS`, `SHEET_ID`, `DRIVE_FOLDER_ID`
+   (y `SHEETS_WEBHOOK_TOKEN` solo al activar cobros).
+4. Ejecuta `autorizarPermisos` una vez.
+5. **Implementar → Nueva implementación → Aplicación web**: ejecutar como *Yo*, acceso *Cualquier persona*.
+   Copia la URL `/exec`.
+
+La hoja se crea sola con encabezados, formato de moneda y lista de estatus
+(Recibido, En reparación, Listo para entrega, Entregado, Anticipo pagado).
+El personal cambia el estatus directamente en la hoja; el historial lo refleja.
+
+## 2. Inicio de sesión con Google
+
+1. Google Cloud Console → **Pantalla de consentimiento de OAuth** (Externo).
+2. **Credenciales → ID de cliente de OAuth → Aplicación web**. Orígenes autorizados:
+   `https://z-pev-servicio.web.app`, el dominio propio si lo hay, y `http://localhost:5173`.
+3. El mismo ID va en `VITE_GOOGLE_CLIENT_ID`, en la propiedad `GOOGLE_CLIENT_ID` de Apps Script
+   y en `functions/.env`.
+
+## 3. Desarrollo y despliegue (PowerShell)
+
+```powershell
+copy .env.example .env      # pega la URL /exec y el client ID
 npm install
-npm run dev                   # desarrollo en http://localhost:5173
-npm run build                 # genera dist/ para publicar
+npm run dev                 # http://localhost:5173
+npm run build
+firebase deploy --only hosting
 ```
 
-Publica `dist/` en cualquier hosting estático (Firebase Hosting, Netlify, Vercel o el sitio de zescootersmx.com).
-Si usas Firebase Hosting con el mismo proyecto que AllAIs o www.nni.ai, usa un sitio separado.
-
-## 3. Uso diario
-
-- El personal entra con su cuenta de Google. Solo entran los correos listados en `ALLOWED_EMAILS`.
-  La sesión dura lo que dure el token de Google (aprox. 1 h) y se cierra sola al vencer.
-- Captura la orden. La vista previa se actualiza en vivo.
-- El cliente lee los términos hasta el final, marca la casilla y firma en el recuadro.
-- **Enviar** guarda la fila en la hoja con folio `ZE-AAAAMMDD-NNNN` y la firma en Drive.
+Con cobros activos: `firebase deploy --only functions:billing,hosting` (ver `docs/MERCADO_PAGO.md`).
 
 ## Notas
 
-- La firma se guarda como PNG recortado al trazo, con fondo blanco y 2× de resolución.
-- Los términos están en `src/terms.js`. Cualquier cambio legal debe reflejarse ahí y subir `TERMS_VERSION`.
-  Los puntos pendientes de revisión legal están marcados en el encabezado de ese archivo.
-- El pago en línea (anticipo con Mercado Pago) no está incluido en esta versión.
+- Los términos viven en `src/terms.js`; cualquier cambio legal sube `TERMS_VERSION`.
+  Pendientes de revisión legal: CUARTA («no periodo»), DÉCIMA SEXTA («PRESENTADOR»),
+  DÉCIMA NOVENA («conduce»).
+- Las firmas se comparten en Drive como «cualquiera con el enlace»; si se prefiere, cambia
+  `saveSignature_` para limitarlas al dominio.
+- La sesión dura lo que el token de Google (≈1 h) y se cierra sola al vencer.

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Orden de servicio · Z e-Scooters MX</title>
+  <title>Z-PEV Servicio · Orden de servicio</title>
   <meta name="description" content="Captura y firma digital de órdenes de servicio de Z e-Scooters México." />
   <meta name="theme-color" content="#F3F2EE" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -20,13 +20,17 @@
       <div class="brand">
         <div class="login-tile" aria-hidden="true">Z</div>
         <div class="brand-copy">
-          <span class="brand-title">Orden de servicio</span>
+          <span class="brand-title">Z-PEV Servicio</span>
           <span class="brand-sub">Z E-Scooters México</span>
         </div>
       </div>
       <div class="login-rail-foot">
-        <p class="login-rail-line">Captura, firma y registro de cada orden en un solo flujo.</p>
-        <p class="login-rail-line mono">Hoja de cálculo · Drive · Apps Script</p>
+        <p class="login-rail-line">Recepción, contrato y firma de cada vehículo en un solo flujo.</p>
+        <ul class="login-points">
+          <li>Orden con folio y vista previa en vivo</li>
+          <li>Términos y firma digital del cliente</li>
+          <li>Registro automático en la hoja del taller</li>
+        </ul>
       </div>
     </aside>
 
@@ -49,59 +53,85 @@
     <!-- Barra lateral -->
     <aside class="rail" aria-label="Navegación">
       <div class="brand">
-        <div class="brand-plate"><img src="/brand/z-logo.png" alt="Z e-Scooters MX · Personal Electric Vehicle" /></div>
+        <div class="brand-tile" aria-hidden="true">Z</div>
         <div class="brand-copy">
-          <span class="brand-title">Orden de servicio</span>
-          <span class="brand-sub">Z e-Scooters México S.A. de C.V.</span>
+          <span class="brand-title">Z-PEV Servicio</span>
+          <span class="brand-sub">Z E-Scooters México</span>
         </div>
       </div>
 
-      <nav class="nav">
-        <a class="nav-item is-active" href="#orden">
+      <nav class="nav" aria-label="Principal">
+        <button type="button" class="nav-item is-active" data-view="orden" aria-current="page">
           <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/></svg>
           Nueva orden
-        </a>
-        <a class="nav-item" href="#cliente">
-          <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
-          Datos del cliente
-        </a>
-        <a class="nav-item" href="#terminos">
+        </button>
+        <button type="button" class="nav-item" data-view="historial">
+          <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></svg>
+          Historial
+        </button>
+        <a class="nav-item" href="#terminos" data-jump="orden">
           <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l4 4v14H6z"/><path d="M9 12h7M9 16h7M9 8h3"/></svg>
-          Términos y condiciones
+          Términos
         </a>
-        <a class="nav-item" href="#firma">
+        <a class="nav-item" href="#firma" data-jump="orden">
           <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17c3-2 4 2 6 0s3-4 5-2 2 3 4 1"/><path d="M3 21h18"/></svg>
-          Firma digital
+          Firma del cliente
         </a>
       </nav>
 
       <div class="rail-foot">
-        <div class="rail-user">
-          <span class="rail-avatar" id="userAvatar" aria-hidden="true">ZE</span>
-          <div class="rail-user-copy">
-            <span class="rail-user-name" id="userName">Sin sesión</span>
-            <span class="rail-user-mail" id="userMail"></span>
+        <div class="meter">
+          <div class="meter-row">
+            <span>Órdenes del mes</span>
+            <span class="mono" id="monthCount">—</span>
           </div>
+          <div class="meter-bar"><span id="monthBar"></span></div>
         </div>
-        <button type="button" class="rail-signout" id="signOutBtn">Cerrar sesión</button>
-        <p class="rail-status" id="connStatus" role="status">Sin conectar</p>
-        <p class="rail-note">Las órdenes se guardan en Google Sheets al enviarse.</p>
+        <div class="rail-card">
+          <div class="rail-user">
+            <span class="rail-avatar" id="userAvatar" aria-hidden="true">ZE</span>
+            <div class="rail-user-copy">
+              <span class="rail-user-name" id="userName">Sin sesión</span>
+              <span class="rail-user-mail" id="userMail"></span>
+            </div>
+          </div>
+          <p class="rail-status" id="connStatus" role="status">Sin conectar</p>
+          <button type="button" class="rail-signout" id="signOutBtn">Cerrar sesión</button>
+        </div>
       </div>
     </aside>
 
-    <!-- Área principal -->
-    <main class="main" id="orden">
+    <!-- Área de trabajo -->
+    <main class="main">
 
-      <header class="hero">
-        <div class="hero-stage" aria-hidden="true">
-          <canvas id="hero3d"></canvas>
+      <header class="topbar">
+        <div class="emisor">
+          <span class="emisor-name">Z e-Scooters México, S.A. de C.V.</span>
+          <span class="dot" aria-hidden="true"></span>
+          <span class="mono">ZEM210611H42</span>
+          <span class="dot" aria-hidden="true"></span>
+          <span>Av. Patriotismo 176, Escandón I, CDMX</span>
+          <span class="dot" aria-hidden="true"></span>
+          <span>L–V 10:00–19:00 · S 10:00–15:00</span>
         </div>
-        <div class="hero-copy">
-          <p class="eyebrow">Taller · Mantenimiento y reparación</p>
-          <h1>Nueva orden de servicio</h1>
-          <p class="lede">Captura los datos del vehículo, revisa las condiciones y firma. La orden queda registrada al instante.</p>
+        <div class="topbar-right">
+          <span class="draft-state" id="draftState" aria-live="polite"></span>
+          <span class="top-avatar" id="topAvatar" aria-hidden="true">ZE</span>
         </div>
       </header>
+
+      <div class="wrap" id="view-orden">
+      <div class="title-row" id="orden">
+        <div class="title-copy">
+          <span class="kicker">Recepción de vehículo · Taller</span>
+          <h1>Nueva orden de servicio</h1>
+          <p class="lede">Captura receptor y vehículo; la vista previa se arma en tiempo real. Al enviar, la orden queda en la hoja del taller con folio y firma.</p>
+        </div>
+        <div class="title-side">
+          <div class="logo-plate" aria-hidden="true"><canvas id="hero3d"></canvas></div>
+          <button type="button" class="ghost" id="discardBtn">Descartar borrador</button>
+        </div>
+      </div>
 
       <div class="layout">
 
@@ -176,7 +206,7 @@
               <div class="field">
                 <label for="servicio">Descripción del tipo de servicio</label>
                 <textarea id="servicio" name="servicio" class="input" rows="4" placeholder="Describe la falla o el mantenimiento solicitado" required></textarea>
-                <p class="hint is-hidden" id="batHint">Servicio de batería: se cobra un anticipo del 50 % del precio establecido.</p>
+                <p class="hint hint-warn is-hidden" id="batHint">Servicio de batería: se cobra un anticipo del 50 % del precio establecido.</p>
               </div>
               <div class="field">
                 <label for="caracteristicas">Características generales del vehículo</label>
@@ -257,6 +287,7 @@
               <h2 id="s6">Términos y condiciones</h2>
             </header>
             <p class="terms-intro">Lee el contrato completo. La casilla se habilita al llegar al final.</p>
+            <div class="terms-progress" aria-hidden="true"><span id="termsBar"></span></div>
             <div class="terms" id="termsBox" tabindex="0" aria-label="Términos y condiciones">
               <div id="termsBody"></div>
             </div>
@@ -364,8 +395,52 @@
             <span class="cta-label">Completa la orden para enviar</span>
             <svg class="cta-arrow" aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
           </button>
-          <p class="fine center">Línea de atención: 5565018583 · 5544978500</p>
+          <p class="fine center">Consultas y estatus: <span class="mono">55 6501 8583</span> · <span class="mono">55 4497 8500</span></p>
         </aside>
+      </div>
+      </div>
+
+      <!-- Historial -->
+      <div class="wrap" id="view-historial" hidden>
+        <div class="title-row">
+          <div class="title-copy">
+            <span class="kicker">Registro del taller</span>
+            <h1>Historial de órdenes</h1>
+            <p class="lede">Las últimas órdenes guardadas en la hoja. Avisa al cliente por WhatsApp cuando su vehículo esté listo.</p>
+          </div>
+          <div class="title-side">
+            <label class="search">
+              <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+              <input id="histSearch" type="search" placeholder="Buscar folio, cliente o vehículo" aria-label="Buscar en el historial" />
+            </label>
+            <button type="button" class="ghost" id="histReload">Actualizar</button>
+          </div>
+        </div>
+
+        <div class="stats" id="histStats">
+          <div class="stat"><span class="k">Órdenes</span><span class="stat-v mono" id="stOrders">—</span></div>
+          <div class="stat"><span class="k">En taller</span><span class="stat-v mono" id="stOpen">—</span></div>
+          <div class="stat"><span class="k">Anticipos</span><span class="stat-v mono" id="stAdv">—</span></div>
+          <div class="stat"><span class="k">Saldo por cobrar</span><span class="stat-v mono" id="stDue">—</span></div>
+        </div>
+
+        <div class="table-card">
+          <table class="table" aria-describedby="histEmpty">
+            <thead>
+              <tr>
+                <th scope="col">Folio</th>
+                <th scope="col">Cliente</th>
+                <th scope="col">Vehículo</th>
+                <th scope="col" class="num">Total</th>
+                <th scope="col" class="num">Saldo</th>
+                <th scope="col">Estatus</th>
+                <th scope="col"><span class="sr-only">Acciones</span></th>
+              </tr>
+            </thead>
+            <tbody id="histBody"></tbody>
+          </table>
+          <p class="table-empty" id="histEmpty">Cargando órdenes…</p>
+        </div>
       </div>
     </main>
   </div>
@@ -379,6 +454,16 @@
       <h3 id="okTitle">Orden registrada</h3>
       <p class="success-folio mono" id="okFolio">ZE-</p>
       <p class="success-text">Quedó guardada en la hoja del taller con la firma del cliente.</p>
+      <div class="pay-block" id="payBlock" hidden>
+        <div class="pay-row"><span>Anticipo a cobrar</span><span class="mono" id="payAmount">$0.00</span></div>
+        <button type="button" class="ghost pay-btn" id="payBtn">Generar link de pago del anticipo</button>
+        <div class="pay-link" id="payLink" hidden>
+          <input class="input mono" id="payUrl" readonly aria-label="Link de pago" />
+          <button type="button" class="ghost" id="payCopy">Copiar</button>
+          <a class="ghost" id="payWa" target="_blank" rel="noopener">Enviar por WhatsApp</a>
+        </div>
+      </div>
+      <a class="ghost wa-btn" id="okWa" target="_blank" rel="noopener">Enviar comprobante por WhatsApp</a>
       <button type="button" class="cta" id="newBtn"><span class="cta-label">Capturar otra orden</span></button>
     </div>
   </div>

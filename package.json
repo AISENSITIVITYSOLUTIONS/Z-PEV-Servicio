@@ -1,11 +1,12 @@
 {
-  "name": "zescooters-orden-servicio",
+  "name": "z-pev-servicio",
   "private": true,
-  "version": "1.0.0",
+  "version": "2.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "test:functions": "npm --prefix functions test",
     "preview": "vite preview --host"
   },
   "dependencies": {
