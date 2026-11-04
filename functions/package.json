@@ -1,0 +1,13 @@
+{
+  "name": "z-pev-servicio-functions",
+  "private": true,
+  "main": "index.js",
+  "engines": { "node": "22" },
+  "scripts": {
+    "test": "node --test"
+  },
+  "dependencies": {
+    "firebase-functions": "^6.1.0",
+    "google-auth-library": "^9.14.2"
+  }
+}
