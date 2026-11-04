@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Orden de servicio · Z e-Scooters MX</title>
+  <meta name="description" content="Captura y firma digital de órdenes de servicio de Z e-Scooters México." />
+  <meta name="theme-color" content="#F3F2EE" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="icon" href="/brand/z-logo.png" />
+</head>
+<body>
+  <div class="shell">
+
+    <!-- Barra lateral -->
+    <aside class="rail" aria-label="Navegación">
+      <div class="brand">
+        <div class="brand-plate"><img src="/brand/z-logo.png" alt="Z e-Scooters MX · Personal Electric Vehicle" /></div>
+        <div class="brand-copy">
+          <span class="brand-title">Orden de servicio</span>
+          <span class="brand-sub">Z e-Scooters México S.A. de C.V.</span>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <a class="nav-item is-active" href="#orden">
+          <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/></svg>
+          Nueva orden
+        </a>
+        <a class="nav-item" href="#cliente">
+          <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
+          Datos del cliente
+        </a>
+        <a class="nav-item" href="#terminos">
+          <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h9l4 4v14H6z"/><path d="M9 12h7M9 16h7M9 8h3"/></svg>
+          Términos y condiciones
+        </a>
+        <a class="nav-item" href="#firma">
+          <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17c3-2 4 2 6 0s3-4 5-2 2 3 4 1"/><path d="M3 21h18"/></svg>
+          Firma digital
+        </a>
+      </nav>
+
+      <div class="rail-foot">
+        <label class="rail-label" for="accessKey">Clave del equipo</label>
+        <input id="accessKey" class="rail-input" type="password" autocomplete="off" placeholder="Clave de acceso" />
+        <p class="rail-status" id="connStatus" role="status">Sin conectar</p>
+        <p class="rail-note">Las órdenes se guardan en Google Sheets al enviarse.</p>
+      </div>
+    </aside>
+
+    <!-- Área principal -->
+    <main class="main" id="orden">
+
+      <header class="hero">
+        <div class="hero-stage" aria-hidden="true">
+          <canvas id="hero3d"></canvas>
+        </div>
+        <div class="hero-copy">
+          <p class="eyebrow">Taller · Mantenimiento y reparación</p>
+          <h1>Nueva orden de servicio</h1>
+          <p class="lede">Captura los datos del vehículo, revisa las condiciones y firma. La orden queda registrada al instante.</p>
+        </div>
+      </header>
+
+      <div class="layout">
+
+        <form id="orderForm" class="form" novalidate>
+
+          <!-- 01 Cliente -->
+          <section class="card" id="cliente" aria-labelledby="s1">
+            <header class="card-head">
+              <span class="index">01</span>
+              <h2 id="s1">Cliente</h2>
+            </header>
+            <div class="grid grid-2">
+              <div class="field span-2">
+                <label for="nombre">Nombre</label>
+                <input id="nombre" name="nombre" class="input" type="text" autocomplete="name" placeholder="Nombre completo del cliente" required />
+              </div>
+              <div class="field">
+                <label for="telefono">Teléfono</label>
+                <input id="telefono" name="telefono" class="input mono" type="tel" inputmode="tel" autocomplete="tel" placeholder="10 dígitos" maxlength="16" required />
+              </div>
+              <div class="grid-dt">
+                <div class="field">
+                  <label for="fecha">Fecha</label>
+                  <input id="fecha" name="fecha" class="input mono" type="date" required />
+                </div>
+                <div class="field">
+                  <label for="hora">Hora</label>
+                  <input id="hora" name="hora" class="input mono" type="time" required />
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- 02 Vehículo -->
+          <section class="card" aria-labelledby="s2">
+            <header class="card-head">
+              <span class="index">02</span>
+              <h2 id="s2">Datos del vehículo</h2>
+            </header>
+            <div class="grid grid-2">
+              <div class="field">
+                <label for="marca">Marca y modelo</label>
+                <input id="marca" name="marca" class="input" type="text" placeholder="Ej. KingSong KS N16" required />
+              </div>
+              <div class="field">
+                <label for="serie">N° de serie</label>
+                <input id="serie" name="serie" class="input mono" type="text" placeholder="Número de serie" />
+              </div>
+              <div class="field span-2">
+                <span class="label" id="lbl-enc">¿El vehículo está encendido?</span>
+                <div class="segmented" role="radiogroup" aria-labelledby="lbl-enc">
+                  <label class="seg">
+                    <input type="radio" name="encendido" value="si" />
+                    <span>Sí</span>
+                  </label>
+                  <label class="seg">
+                    <input type="radio" name="encendido" value="no" />
+                    <span>No</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- 03 Servicio -->
+          <section class="card" aria-labelledby="s3">
+            <header class="card-head">
+              <span class="index">03</span>
+              <h2 id="s3">Servicio y condición</h2>
+            </header>
+            <div class="grid">
+              <div class="field">
+                <label for="servicio">Descripción del tipo de servicio</label>
+                <textarea id="servicio" name="servicio" class="input" rows="4" placeholder="Describe la falla o el mantenimiento solicitado" required></textarea>
+                <p class="hint is-hidden" id="batHint">Servicio de batería: se cobra un anticipo del 50 % del precio establecido.</p>
+              </div>
+              <div class="field">
+                <label for="caracteristicas">Características generales del vehículo</label>
+                <textarea id="caracteristicas" name="caracteristicas" class="input" rows="3" placeholder="Golpes, rayaduras, tapa de display, estado de llantas, etcétera"></textarea>
+              </div>
+            </div>
+          </section>
+
+          <!-- 04 Accesorios -->
+          <section class="card" aria-labelledby="s4">
+            <header class="card-head">
+              <span class="index">04</span>
+              <h2 id="s4">Accesorios recibidos</h2>
+            </header>
+            <div class="grid grid-3">
+              <div class="field">
+                <label for="llaves">Llaves o NFC</label>
+                <input id="llaves" name="llaves" class="input" type="text" placeholder="Cantidad o detalle" />
+              </div>
+              <div class="field">
+                <label for="cargador">Cargador</label>
+                <input id="cargador" name="cargador" class="input" type="text" placeholder="Sí, modelo o no entregado" />
+              </div>
+              <div class="field">
+                <label for="otros">Otros</label>
+                <input id="otros" name="otros" class="input" type="text" placeholder="Candado, tapa, etcétera" />
+              </div>
+            </div>
+          </section>
+
+          <!-- 05 Presupuesto -->
+          <section class="card" aria-labelledby="s5">
+            <header class="card-head">
+              <span class="index">05</span>
+              <h2 id="s5">Presupuesto y pagos</h2>
+            </header>
+            <div class="grid grid-2">
+              <div class="field span-2">
+                <label for="presupuesto">Costo de presupuesto aproximado</label>
+                <div class="money">
+                  <span class="money-sign">$</span>
+                  <input id="presupuesto" name="presupuesto" class="input mono" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00" />
+                  <span class="money-tag">M.N.</span>
+                </div>
+              </div>
+              <div class="field">
+                <label for="anticipo">Anticipo</label>
+                <div class="money">
+                  <span class="money-sign">$</span>
+                  <input id="anticipo" name="anticipo" class="input mono" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00" />
+                  <span class="money-tag">M.N.</span>
+                </div>
+                <button type="button" class="link-btn is-hidden" id="halfBtn">Usar 50 % del total</button>
+              </div>
+              <div class="field">
+                <label for="total">Total</label>
+                <div class="money">
+                  <span class="money-sign">$</span>
+                  <input id="total" name="total" class="input mono" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00" />
+                  <span class="money-tag">M.N.</span>
+                </div>
+              </div>
+              <div class="field span-2">
+                <label for="saldo">Saldo pendiente</label>
+                <div class="money is-readonly">
+                  <span class="money-sign">$</span>
+                  <input id="saldo" name="saldo" class="input mono" type="text" readonly tabindex="-1" value="0.00" />
+                  <span class="money-tag">M.N.</span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- 06 Términos -->
+          <section class="card" id="terminos" aria-labelledby="s6">
+            <header class="card-head">
+              <span class="index">06</span>
+              <h2 id="s6">Términos y condiciones</h2>
+            </header>
+            <p class="terms-intro">Lee el contrato completo. La casilla se habilita al llegar al final.</p>
+            <div class="terms" id="termsBox" tabindex="0" aria-label="Términos y condiciones">
+              <div id="termsBody"></div>
+            </div>
+            <label class="check" id="acceptLabel">
+              <input type="checkbox" id="acepta" name="acepta" disabled />
+              <span class="check-box" aria-hidden="true"></span>
+              <span class="check-text">Leí y acepto los términos y condiciones del contrato de prestación de servicios.</span>
+            </label>
+            <p class="hint" id="termsHint">Desplázate hasta el final del contrato para continuar.</p>
+          </section>
+
+          <!-- 07 Firma -->
+          <section class="card" id="firma" aria-labelledby="s7">
+            <header class="card-head">
+              <span class="index">07</span>
+              <h2 id="s7">Firma del cliente</h2>
+              <span class="head-note">Firma con el dedo o el mouse</span>
+            </header>
+
+            <div class="sig-scene" id="sigScene">
+              <div class="sig-plane" id="sigPlane">
+                <div class="sig-base" aria-hidden="true"></div>
+                <div class="sig-paper">
+                  <canvas id="sigCanvas" class="sig-canvas" aria-label="Área de firma"></canvas>
+                  <div class="sig-line" aria-hidden="true"><span>×</span></div>
+                  <div class="sig-hint" id="sigHint" aria-hidden="true">Firme aquí</div>
+                  <div class="sig-sheen" aria-hidden="true"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="sig-actions">
+              <button type="button" class="ghost" id="undoBtn">Deshacer</button>
+              <button type="button" class="ghost" id="clearBtn">Limpiar firma</button>
+              <span class="sig-state" id="sigState">Sin firma</span>
+            </div>
+          </section>
+
+          <div class="form-foot">
+            <p class="fine">Al enviar, la orden se registra en la hoja del taller con el folio asignado.</p>
+          </div>
+        </form>
+
+        <!-- Vista previa -->
+        <aside class="preview" aria-label="Vista previa de la orden">
+          <div class="receipt">
+            <div class="receipt-head">
+              <div class="receipt-title">
+                <span class="receipt-kicker">Vista previa</span>
+                <span class="receipt-name">Orden de servicio</span>
+              </div>
+              <span class="pill">Borrador</span>
+            </div>
+
+            <div class="receipt-body">
+              <div class="pair">
+                <div>
+                  <span class="k">Cliente</span>
+                  <span class="v" id="pvNombre">Nombre pendiente</span>
+                  <span class="v mono small" id="pvTel">Teléfono pendiente</span>
+                </div>
+                <div>
+                  <span class="k">Vehículo</span>
+                  <span class="v" id="pvMarca">Marca y modelo</span>
+                  <span class="v mono small" id="pvSerie">Sin número de serie</span>
+                </div>
+              </div>
+
+              <div class="rule"></div>
+
+              <div class="svc">
+                <span class="k">Servicio</span>
+                <p class="svc-text" id="pvServicio">Describe el servicio solicitado.</p>
+                <div class="chips" id="pvChips"></div>
+              </div>
+
+              <div class="rule"></div>
+
+              <dl class="sums">
+                <div><dt>Presupuesto aprox.</dt><dd class="mono" id="pvPresup">$0.00</dd></div>
+                <div><dt>Anticipo</dt><dd class="mono" id="pvAnticipo">$0.00</dd></div>
+                <div class="sum-total"><dt>Saldo pendiente</dt><dd class="mono" id="pvSaldo">$0.00</dd></div>
+              </dl>
+
+              <div class="sig-preview" id="pvSigBox">
+                <span class="k">Firma</span>
+                <div class="sig-thumb" id="pvSig"><span>Pendiente</span></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="checks" id="checks" aria-live="polite">
+            <span class="k">Antes de enviar</span>
+            <ul class="checklist">
+              <li data-check="cliente"><i></i>Nombre y teléfono a 10 dígitos</li>
+              <li data-check="vehiculo"><i></i>Marca y modelo del vehículo</li>
+              <li data-check="servicio"><i></i>Descripción del servicio</li>
+              <li data-check="encendido"><i></i>Estado de encendido</li>
+              <li data-check="terminos"><i></i>Términos aceptados</li>
+              <li data-check="firma"><i></i>Firma registrada</li>
+            </ul>
+          </div>
+
+          <button type="submit" form="orderForm" class="cta" id="submitBtn" disabled>
+            <span class="cta-label">Completa la orden para enviar</span>
+            <svg class="cta-arrow" aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </button>
+          <p class="fine center">Línea de atención: 5565018583 · 5544978500</p>
+        </aside>
+      </div>
+    </main>
+  </div>
+
+  <!-- Confirmación -->
+  <div class="overlay" id="success" hidden>
+    <div class="success-card" role="dialog" aria-modal="true" aria-labelledby="okTitle">
+      <div class="success-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.2 4.2L19 7"/></svg>
+      </div>
+      <h3 id="okTitle">Orden registrada</h3>
+      <p class="success-folio mono" id="okFolio">ZE-</p>
+      <p class="success-text">Quedó guardada en la hoja del taller con la firma del cliente.</p>
+      <button type="button" class="cta" id="newBtn"><span class="cta-label">Capturar otra orden</span></button>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
