@@ -10,9 +10,41 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="icon" href="/brand/z-logo.png" />
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
-<body>
-  <div class="shell">
+<body class="is-locked">
+
+  <!-- Inicio de sesión -->
+  <div class="login" id="login">
+    <aside class="login-rail">
+      <div class="brand">
+        <div class="login-tile" aria-hidden="true">Z</div>
+        <div class="brand-copy">
+          <span class="brand-title">Orden de servicio</span>
+          <span class="brand-sub">Z E-Scooters México</span>
+        </div>
+      </div>
+      <div class="login-rail-foot">
+        <p class="login-rail-line">Captura, firma y registro de cada orden en un solo flujo.</p>
+        <p class="login-rail-line mono">Hoja de cálculo · Drive · Apps Script</p>
+      </div>
+    </aside>
+
+    <section class="login-main" aria-labelledby="loginTitle">
+      <div class="login-card">
+        <div class="login-logo"><img src="/brand/z-logo.png" alt="Z e-Scooters MX · Personal Electric Vehicle" /></div>
+        <div class="login-copy">
+          <h1 id="loginTitle">Inicia sesión</h1>
+          <p>Usa tu cuenta de Google autorizada para registrar órdenes de servicio.</p>
+        </div>
+        <div class="login-google" id="googleBtn" aria-label="Iniciar sesión con Google"></div>
+        <p class="login-denied is-hidden" id="loginDenied" role="alert"></p>
+        <p class="login-fine">Acceso solo para personal autorizado. Si no tienes acceso, pide que te den de alta.</p>
+      </div>
+    </section>
+  </div>
+
+  <div class="shell" hidden>
 
     <!-- Barra lateral -->
     <aside class="rail" aria-label="Navegación">
@@ -44,8 +76,14 @@
       </nav>
 
       <div class="rail-foot">
-        <label class="rail-label" for="accessKey">Clave del equipo</label>
-        <input id="accessKey" class="rail-input" type="password" autocomplete="off" placeholder="Clave de acceso" />
+        <div class="rail-user">
+          <span class="rail-avatar" id="userAvatar" aria-hidden="true">ZE</span>
+          <div class="rail-user-copy">
+            <span class="rail-user-name" id="userName">Sin sesión</span>
+            <span class="rail-user-mail" id="userMail"></span>
+          </div>
+        </div>
+        <button type="button" class="rail-signout" id="signOutBtn">Cerrar sesión</button>
         <p class="rail-status" id="connStatus" role="status">Sin conectar</p>
         <p class="rail-note">Las órdenes se guardan en Google Sheets al enviarse.</p>
       </div>

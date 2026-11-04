@@ -4,8 +4,13 @@
  * Recibe la orden desde la app web, asigna folio, guarda la firma (PNG) en Drive
  * y agrega una fila a la hoja "Órdenes".
  *
+ * Acceso: cada petición lleva el ID token de Google del usuario. El script lo verifica
+ * con tokeninfo, comprueba que fue emitido para este cliente (GOOGLE_CLIENT_ID) y que
+ * el correo está en ALLOWED_EMAILS.
+ *
  * Propiedades del script (Configuración del proyecto → Propiedades del script):
- *   ACCESS_KEY        Clave que escribe el personal en la app (cámbiala por una propia).
+ *   GOOGLE_CLIENT_ID  ID de cliente OAuth (termina en .apps.googleusercontent.com).
+ *   ALLOWED_EMAILS    Correos autorizados, separados por coma.
  *   SHEET_ID          ID de la hoja de cálculo (el tramo entre /d/ y /edit en la URL).
  *   DRIVE_FOLDER_ID   ID de la carpeta de Drive donde se guardan las firmas.
  */
@@ -35,7 +40,7 @@ const HEADERS = [
   'Versión de términos',
   'Firma (enlace)',
   'Estatus',
-  'Capturado desde'
+  'Capturado por'
 ];
 
 function doGet() {
@@ -50,8 +55,11 @@ function doPost(e) {
     const props = PropertiesService.getScriptProperties();
     const data = JSON.parse(e.postData.contents || '{}');
 
-    if (!data.clave || data.clave !== props.getProperty('ACCESS_KEY')) {
-      return json_({ ok: false, error: 'Clave de acceso incorrecta.' });
+    let email;
+    try {
+      email = verifyUser_(data.idToken, props);
+    } catch (authErr) {
+      return json_({ ok: false, error: authErr.message });
     }
 
     const problem = validate_(data);
@@ -85,7 +93,7 @@ function doPost(e) {
       data.termsVersion || '',
       firmaUrl,
       'Recibido',
-      'App de órdenes'
+      email
     ]);
 
     return json_({ ok: true, folio: folio, firmaUrl: firmaUrl });
@@ -105,6 +113,43 @@ function json_(obj) {
 function num_(v) {
   const n = parseFloat(v);
   return isNaN(n) ? 0 : Math.round(n * 100) / 100;
+}
+
+/**
+ * Verifica el ID token de Google y devuelve el correo autorizado.
+ * Lanza Error con un mensaje para el usuario si no es válido o no tiene acceso.
+ */
+function verifyUser_(idToken, props) {
+  if (!idToken) throw new Error('Sesión no iniciada. Vuelve a iniciar sesión con Google.');
+
+  const resp = UrlFetchApp.fetch('https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(idToken), {
+    muteHttpExceptions: true
+  });
+  if (resp.getResponseCode() !== 200) {
+    throw new Error('Sesión no válida o vencida. Vuelve a iniciar sesión.');
+  }
+  const info = JSON.parse(resp.getContentText());
+
+  const clientId = props.getProperty('GOOGLE_CLIENT_ID');
+  if (!clientId || info.aud !== clientId) {
+    throw new Error('El token no corresponde a esta aplicación.');
+  }
+  if (info.email_verified !== 'true' && info.email_verified !== true) {
+    throw new Error('Tu correo de Google no está verificado.');
+  }
+  if (Number(info.exp) * 1000 <= Date.now()) {
+    throw new Error('Sesión vencida. Vuelve a iniciar sesión.');
+  }
+
+  const email = String(info.email || '').toLowerCase();
+  const allowed = String(props.getProperty('ALLOWED_EMAILS') || '')
+    .split(',')
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+  if (allowed.indexOf(email) === -1) {
+    throw new Error('Tu cuenta (' + email + ') no tiene acceso. Pide que te den de alta.');
+  }
+  return email;
 }
 
 function validate_(d) {

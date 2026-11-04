@@ -2,9 +2,11 @@ import './style.css';
 import { TERMS, TERMS_CLOSING, TERMS_PARTIES, TERMS_TITLE, TERMS_VERSION } from './terms.js';
 import { mountHero } from './hero3d.js';
 import { mountSignature } from './signature.js';
+import { initAuth, getSession, signOut } from './auth.js';
 
 const API_URL = import.meta.env.VITE_API_URL || '';
-const KEY_STORAGE = 'ze-orden-clave';
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
+let session = null;
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
@@ -230,27 +232,69 @@ acepta.addEventListener('change', () => {
   updatePreview();
 });
 
-// ---------- Clave de acceso ----------
-const keyInput = $('#accessKey');
-keyInput.value = localStorage.getItem(KEY_STORAGE) || '';
-keyInput.addEventListener('change', () => {
-  localStorage.setItem(KEY_STORAGE, keyInput.value.trim());
-  setConnStatus();
-});
-
+// ---------- Sesión ----------
 function setConnStatus() {
   const el = $('#connStatus');
   if (!API_URL) {
     el.textContent = 'Falta configurar la URL de Apps Script';
     el.dataset.state = 'warn';
-  } else if (!keyInput.value.trim()) {
-    el.textContent = 'Escribe la clave del equipo';
+  } else if (!session) {
+    el.textContent = 'Inicia sesión para enviar';
     el.dataset.state = 'warn';
   } else {
     el.textContent = 'Listo para enviar';
     el.dataset.state = 'ok';
   }
 }
+
+function paintUser(s) {
+  $('#userName').textContent = s?.name || 'Sin sesión';
+  $('#userMail').textContent = s?.email || '';
+  const av = $('#userAvatar');
+  if (s?.picture) {
+    const img = document.createElement('img');
+    img.src = s.picture;
+    img.alt = '';
+    img.referrerPolicy = 'no-referrer';
+    av.replaceChildren(img);
+  } else {
+    av.textContent = (s?.name || 'ZE').split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase();
+  }
+}
+
+function showApp(s) {
+  session = s;
+  document.body.classList.remove('is-locked');
+  $('#login').hidden = true;
+  $('.shell').hidden = false;
+  paintUser(s);
+  setConnStatus();
+  updatePreview();
+}
+
+function showLogin(message = '') {
+  session = null;
+  document.body.classList.add('is-locked');
+  $('#login').hidden = false;
+  $('.shell').hidden = true;
+  paintUser(null);
+  const denied = $('#loginDenied');
+  denied.textContent = message;
+  denied.classList.toggle('is-hidden', !message);
+  setConnStatus();
+}
+
+$('#signOutBtn').addEventListener('click', () => {
+  signOut();
+});
+
+initAuth({
+  clientId: GOOGLE_CLIENT_ID,
+  buttonEl: $('#googleBtn'),
+  onSignedIn: (s) => showApp(s),
+  onSignedOut: () => showLogin(),
+  onError: (msg) => showLogin(msg)
+});
 
 // ---------- Mensajes ----------
 const toastEl = $('#toast');
@@ -290,15 +334,15 @@ form.addEventListener('submit', async (e) => {
     toast('Configura VITE_API_URL con la URL de la Web App de Apps Script.', 'error');
     return;
   }
-  const clave = keyInput.value.trim();
-  if (!clave) {
-    keyInput.focus();
-    toast('Escribe la clave del equipo en la barra lateral.', 'warn');
+  session = getSession();
+  if (!session) {
+    toast('Tu sesión venció. Inicia sesión de nuevo.', 'warn');
+    showLogin('Tu sesión venció. Vuelve a iniciar sesión.');
     return;
   }
 
   const payload = {
-    clave,
+    idToken: session.token,
     termsVersion: TERMS_VERSION,
     capturadoEn: new Date().toISOString(),
     fecha: v.fecha,
@@ -336,7 +380,7 @@ form.addEventListener('submit', async (e) => {
     setConnStatus();
   } catch (err) {
     console.error(err);
-    toast(`No se pudo guardar: ${err.message}. Revisa la clave y la conexión.`, 'error');
+    toast(`No se pudo guardar: ${err.message}. Revisa tu sesión y la conexión.`, 'error');
     submitBtn.disabled = false;
     submitLabel.textContent = 'Enviar orden y guardar';
   } finally {
