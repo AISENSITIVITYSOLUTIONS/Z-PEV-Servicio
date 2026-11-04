@@ -12,7 +12,8 @@
  *
  * Propiedades del script (Configuración del proyecto → Propiedades del script):
  *   GOOGLE_CLIENT_ID      ID de cliente OAuth (termina en .apps.googleusercontent.com).
- *   ALLOWED_EMAILS        Correos autorizados, separados por coma.
+ *   ALLOWED_EMAILS        Correos autorizados, separados por coma, o bien
+ *   ALLOWED_EMAIL1..N     una propiedad por correo (ALLOWED_EMAIL1, ALLOWED_EMAIL2, ...).
  *   SHEET_ID              ID de la hoja de cálculo (entre /d/ y /edit en la URL).
  *   DRIVE_FOLDER_ID       ID de la carpeta de Drive para las firmas.
  *   SHEETS_WEBHOOK_TOKEN  Solo si se activan cobros: cadena larga aleatoria, igual a la de Firebase.
@@ -172,10 +173,27 @@ function verifyUser_(idToken, props) {
   if (Number(info.exp) * 1000 <= Date.now()) throw new Error('Sesión vencida. Vuelve a iniciar sesión.');
 
   const email = String(info.email || '').toLowerCase();
-  const allowed = String(props.getProperty('ALLOWED_EMAILS') || '')
-    .split(',').map(function (x) { return x.trim().toLowerCase(); }).filter(Boolean);
+  const allowed = allowedEmails_(props);
   if (allowed.indexOf(email) === -1) throw new Error('Tu cuenta (' + email + ') no tiene acceso. Pide que te den de alta.');
   return email;
+}
+
+/**
+ * Correos autorizados: ALLOWED_EMAILS (lista separada por comas) y/o
+ * una propiedad por correo: ALLOWED_EMAIL1, ALLOWED_EMAIL2, ALLOWED_EMAIL3...
+ */
+function allowedEmails_(props) {
+  const all = props.getProperties();
+  const out = [];
+  Object.keys(all).forEach(function (k) {
+    if (/^ALLOWED_EMAILS?\d*$/i.test(k)) {
+      String(all[k] || '').split(/[,;\s]+/).forEach(function (x) {
+        const e = x.trim().toLowerCase();
+        if (e && out.indexOf(e) === -1) out.push(e);
+      });
+    }
+  });
+  return out;
 }
 
 /* ---------- Utilidades ---------- */
