@@ -78,3 +78,14 @@ Con cobros activos: `firebase deploy --only functions:billing,hosting` (ver `doc
 - **iPhone / iPad (Safari):** el mismo botón muestra los pasos: Compartir → Agregar a inicio.
 - La app abre a pantalla completa con su ícono y carga sin conexión. Enviar órdenes todavía requiere señal.
 - Cuando hay una versión nueva aparece el aviso **Actualizar**; no se recarga sola para no perder una orden a medio capturar.
+
+## Modo sin conexión
+
+- Sin señal, la orden con su firma se guarda en el teléfono (IndexedDB) y se envía sola al volver la conexión
+  (al recuperar señal, al volver a la app y cada 45 s). El contador **N por enviar** muestra lo pendiente.
+- El teléfono recuerda al último usuario verificado durante 7 días: puede abrir la app y capturar sin señal.
+  El servidor vuelve a verificar la sesión de Google al enviar.
+- Si la sesión vence, la captura no se interrumpe: la orden queda en el teléfono y una franja pide iniciar sesión.
+- Cada orden lleva un **ID de captura**; si un envío llegó pero la respuesta se perdió, el reintento devuelve el
+  mismo folio y no se duplica la fila.
+- La hoja suma las columnas **ID de captura** y **Capturado en (dispositivo)** automáticamente.
