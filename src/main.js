@@ -4,6 +4,7 @@ import { mountHero } from './hero3d.js';
 import { mountSignature } from './signature.js';
 import { initAuth, getSession, signOut } from './auth.js';
 import { API_URL, PAYMENTS_ENABLED, createOrder, listOrders, createPaymentLink } from './api.js';
+import { initPWA } from './pwa.js';
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 const DRAFT_KEY = 'zpev-borrador';
@@ -154,6 +155,13 @@ function updatePreview() {
   const overpaid = v.anticipo > v.total && v.total > 0;
   submitBtn.disabled = !ok || overpaid;
   submitLabel.textContent = overpaid ? 'El anticipo supera el total' : ok ? 'Enviar orden y guardar' : 'Completa la orden para enviar';
+
+  const done = Object.values(checks).filter(Boolean).length;
+  const dockCta = $('#dockCta');
+  dockCta.disabled = !ok || overpaid;
+  dockCta.classList.toggle('is-ready', ok && !overpaid);
+  $('#dockProgress').textContent = `${done}/6`;
+  $('#dockLabel').textContent = overpaid ? 'Anticipo mayor al total' : ok ? 'Enviar orden' : 'Completa la orden';
 }
 
 // ================= Borrador automático =================
@@ -213,7 +221,8 @@ $('#discardBtn').addEventListener('click', () => { resetForm(); toast('Borrador 
 function setView(name) {
   $('#view-orden').hidden = name !== 'orden';
   $('#view-historial').hidden = name !== 'historial';
-  $$('.nav-item[data-view]').forEach((b) => {
+  $('#dock').dataset.view = name;
+  $$('.nav-item[data-view], .dock-tab').forEach((b) => {
     const on = b.dataset.view === name;
     b.classList.toggle('is-active', on);
     if (on) b.setAttribute('aria-current', 'page');
@@ -222,7 +231,7 @@ function setView(name) {
   if (name === 'historial') loadHistory();
   window.scrollTo({ top: 0 });
 }
-$$('.nav-item[data-view]').forEach((b) => b.addEventListener('click', () => setView(b.dataset.view)));
+$$('.nav-item[data-view], .dock-tab').forEach((b) => b.addEventListener('click', () => setView(b.dataset.view)));
 $$('.nav-item[data-jump]').forEach((a) => a.addEventListener('click', () => { if ($('#view-orden').hidden) setView('orden'); }));
 
 // ================= Historial =================
@@ -351,18 +360,22 @@ function showApp(s) {
   session = s;
   $('#login').hidden = true;
   $('.shell').hidden = false;
+  $('#dock').hidden = false;
   paintUser(s);
   setConnStatus();
   updatePreview();
   requestAnimationFrame(checkTermsRead);
   if (!heroMounted) heroMounted = mountHero($('#hero3d'));
-  if (API_URL) listOrders(s.token, 1).then((r) => paintMonth(r.monthCount)).catch(() => {});
+  const vista = new URLSearchParams(location.search).get('vista');
+  if (vista === 'historial') setView('historial');
+  else if (API_URL) listOrders(s.token, 1).then((r) => paintMonth(r.monthCount)).catch(() => {});
 }
 
 function showLogin(message = '') {
   session = null;
   $('#login').hidden = false;
   $('.shell').hidden = true;
+  $('#dock').hidden = true;
   paintUser(null);
   const denied = $('#loginDenied');
   denied.textContent = message;
@@ -529,6 +542,7 @@ function resetForm() {
 }
 
 // ================= Arranque =================
+initPWA();
 renderTerms();
 setNowDefaults();
 restoreDraft();

@@ -2,14 +2,21 @@
 <html lang="es">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Z-PEV Servicio · Orden de servicio</title>
   <meta name="description" content="Captura y firma digital de órdenes de servicio de Z e-Scooters México." />
-  <meta name="theme-color" content="#F3F2EE" />
+  <meta name="theme-color" content="#0F1115" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Z-PEV" />
+  <meta name="format-detection" content="telephone=no" />
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="icon" href="/brand/z-logo.png" />
+  <link rel="icon" type="image/png" href="/icons/favicon-64.png" />
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body class="is-locked">
@@ -44,6 +51,10 @@
         <div class="login-google" id="googleBtn" aria-label="Iniciar sesión con Google"></div>
         <p class="login-denied is-hidden" id="loginDenied" role="alert"></p>
         <p class="login-fine">Acceso solo para personal autorizado. Si no tienes acceso, pide que te den de alta.</p>
+        <button type="button" class="login-install" id="installBtnLogin" hidden>
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>
+          Instalar la app en este teléfono
+        </button>
       </div>
     </section>
   </div>
@@ -98,6 +109,10 @@
           <p class="rail-status" id="connStatus" role="status">Sin conectar</p>
           <button type="button" class="rail-signout" id="signOutBtn">Cerrar sesión</button>
         </div>
+        <button type="button" class="install-btn" id="installBtn" hidden>
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>
+          Instalar app en este equipo
+        </button>
       </div>
     </aside>
 
@@ -466,6 +481,42 @@
       <a class="ghost wa-btn" id="okWa" target="_blank" rel="noopener">Enviar comprobante por WhatsApp</a>
       <button type="button" class="cta" id="newBtn"><span class="cta-label">Capturar otra orden</span></button>
     </div>
+  </div>
+
+  <!-- Barra inferior (móvil) -->
+  <nav class="dock" id="dock" aria-label="Acciones rápidas" hidden>
+    <button type="button" class="dock-tab is-active" data-view="orden" aria-label="Nueva orden">
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/></svg>
+      <span>Orden</span>
+    </button>
+    <button type="button" class="dock-tab" data-view="historial" aria-label="Historial">
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></svg>
+      <span>Historial</span>
+    </button>
+    <button type="submit" form="orderForm" class="dock-cta" id="dockCta" disabled>
+      <span class="dock-progress mono" id="dockProgress">0/6</span>
+      <span class="dock-label" id="dockLabel">Completa la orden</span>
+    </button>
+  </nav>
+
+  <!-- Instalación en iPhone / iPad -->
+  <div class="overlay sheet-overlay" id="iosSheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="iosTitle">
+      <div class="sheet-grip" aria-hidden="true"></div>
+      <img class="sheet-icon" src="/icons/apple-touch-icon.png" alt="" width="64" height="64" />
+      <h3 id="iosTitle">Instala Z-PEV Servicio</h3>
+      <ol class="sheet-steps">
+        <li><span class="step-n mono">1</span><p>Toca <strong>Compartir</strong> <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3M8 7l4-4 4 4"/><path d="M5 11v9h14v-9"/></svg> en la barra de Safari.</p></li>
+        <li><span class="step-n mono">2</span><p>Elige <strong>Agregar a inicio</strong>.</p></li>
+        <li><span class="step-n mono">3</span><p>Toca <strong>Agregar</strong>. Queda con su ícono en la pantalla de inicio.</p></li>
+      </ol>
+      <button type="button" class="cta" id="iosClose"><span class="cta-label">Entendido</span></button>
+    </div>
+  </div>
+
+  <div class="update-bar" id="updateBar" role="status" hidden>
+    <span>Hay una versión nueva de la app.</span>
+    <button type="button" class="update-btn" id="updateBtn">Actualizar</button>
   </div>
 
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>

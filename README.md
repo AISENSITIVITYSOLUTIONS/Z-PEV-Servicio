@@ -71,3 +71,10 @@ Con cobros activos: `firebase deploy --only functions:billing,hosting` (ver `doc
 - Las firmas se comparten en Drive como «cualquiera con el enlace»; si se prefiere, cambia
   `saveSignature_` para limitarlas al dominio.
 - La sesión dura lo que el token de Google (≈1 h) y se cierra sola al vencer.
+
+## App instalable (teléfono y computadora)
+
+- **Android / Chrome / Edge:** botón **Instalar app** en el login o en la barra lateral.
+- **iPhone / iPad (Safari):** el mismo botón muestra los pasos: Compartir → Agregar a inicio.
+- La app abre a pantalla completa con su ícono y carga sin conexión. Enviar órdenes todavía requiere señal.
+- Cuando hay una versión nueva aparece el aviso **Actualizar**; no se recarga sola para no perder una orden a medio capturar.

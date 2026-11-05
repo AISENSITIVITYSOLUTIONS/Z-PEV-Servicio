@@ -567,3 +567,145 @@ textarea.input { height: auto; min-height: 84px; padding: 11px 14px; line-height
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+
+/* ================= App instalable y móvil ================= */
+.install-btn {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  height: 38px; border-radius: var(--r-sm); border: 1px dashed #3A3F47;
+  background: transparent; color: var(--lime); font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.install-btn:hover { border-style: solid; border-color: var(--lime); }
+.login-install {
+  display: flex; align-items: center; justify-content: center; gap: 8px; height: 40px;
+  border-radius: var(--r-sm); border: 1px solid var(--line-2); background: var(--paper);
+  color: var(--ink); font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.login-install:hover { border-color: var(--ink); }
+
+/* Barra inferior: solo en teléfono */
+.dock { display: none; }
+
+/* Hoja de instalación iOS */
+.sheet-overlay { place-items: end center; padding: 0; }
+.sheet {
+  width: min(520px, 100%); display: flex; flex-direction: column; align-items: center; gap: 14px;
+  padding: 10px 22px calc(22px + env(safe-area-inset-bottom)); border-radius: 24px 24px 0 0;
+  background: #FFFFFF; border: 1px solid var(--line); box-shadow: var(--shadow-lift);
+  transform: translateY(24px); transition: transform .3s cubic-bezier(.2,.9,.3,1.1);
+}
+.sheet-overlay.is-in .sheet { transform: none; }
+.sheet-grip { width: 40px; height: 4px; border-radius: 4px; background: var(--line-2); margin-bottom: 4px; }
+.sheet-icon { width: 64px; height: 64px; border-radius: 16px; box-shadow: 0 8px 18px -10px rgba(15,17,21,.45); }
+.sheet h3 { font-size: 19px; font-weight: 600; letter-spacing: -.02em; }
+.sheet-steps { list-style: none; margin: 0; padding: 0; width: 100%; display: flex; flex-direction: column; gap: 10px; }
+.sheet-steps li {
+  display: grid; grid-template-columns: 24px minmax(0, 1fr); align-items: center; gap: 12px; padding: 12px 14px;
+  border-radius: var(--r-md); background: var(--paper); font-size: 14px; color: var(--ink-3);
+}
+.sheet-steps strong { color: var(--ink); }
+.sheet-steps p { line-height: 1.45; }
+.sheet-steps svg { vertical-align: -3px; }
+.step-n {
+  flex: none; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--ink); color: var(--lime); font-size: 12px; font-weight: 600;
+}
+
+/* Aviso de versión nueva */
+.update-bar {
+  position: fixed; left: 50%; top: calc(14px + env(safe-area-inset-top)); z-index: 70; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 14px; padding: 8px 8px 8px 16px; border-radius: 999px;
+  background: var(--ink); color: #FFFFFF; font-size: 13px; box-shadow: var(--shadow-lift); white-space: nowrap;
+}
+.update-btn {
+  height: 32px; padding: 0 14px; border: 0; border-radius: 999px; background: var(--lime);
+  color: var(--ink); font-size: 13px; font-weight: 700; cursor: pointer;
+}
+
+@media (max-width: 900px) {
+  /* iOS no hace zoom si los campos tienen 16px */
+  .input, .search input, textarea.input { font-size: 16px; }
+  .input { height: 46px; }
+
+  .shell { padding-bottom: calc(76px + env(safe-area-inset-bottom)); }
+  .rail { padding-top: calc(14px + env(safe-area-inset-top)); }
+  .install-btn { height: 36px; flex: none; padding: 0 12px; }
+  .rail .nav { display: none; }
+  .preview .cta { display: none; }
+
+  .dock {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+    display: grid; grid-template-columns: auto auto minmax(0, 1fr); align-items: center; gap: 6px;
+    padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
+    background: rgba(15, 17, 21, .96); backdrop-filter: blur(10px);
+    border-top: 1px solid #252932;
+  }
+  .dock[hidden] { display: none; }
+  .dock-tab {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+    width: 64px; height: 52px; border: 0; border-radius: 12px; background: transparent;
+    color: var(--rail-text); font-size: 11px; font-weight: 600; cursor: pointer;
+  }
+  .dock-tab.is-active { color: #FFFFFF; background: var(--ink-2); }
+  .dock-tab.is-active svg { color: var(--lime); }
+  .dock-cta {
+    display: flex; align-items: center; justify-content: center; gap: 10px; height: 52px; min-width: 0;
+    border: 0; border-radius: 14px; background: #252932; color: #8C9098;
+    font-size: 15px; font-weight: 600; cursor: pointer; transition: background-color .2s ease, color .2s ease;
+  }
+  .dock-cta.is-ready { background: var(--lime); color: var(--ink); }
+  .dock-cta:disabled { cursor: not-allowed; }
+  .dock-progress {
+    padding: 3px 8px; border-radius: 999px; font-size: 12px;
+    background: rgba(255,255,255,.08); color: inherit;
+  }
+  .dock-cta.is-ready .dock-progress { background: rgba(15,17,21,.12); }
+  .dock-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dock[data-view='historial'] .dock-cta { display: none; }
+
+  .toast { bottom: calc(86px + env(safe-area-inset-bottom)); }
+  .overlay:not(.sheet-overlay) { padding-bottom: calc(24px + env(safe-area-inset-bottom)); }
+}
+
+/* Abierta como app instalada */
+.is-standalone .topbar { padding-top: calc(10px + env(safe-area-inset-top)); }
+
+@media (max-width: 900px) {
+  /* Cabecera compacta: marca + usuario en una sola fila */
+  .rail { flex-direction: row; align-items: center; flex-wrap: wrap; gap: 10px; padding-bottom: 12px; }
+  .rail .brand { flex: 1; min-width: 0; padding: 0; }
+  .brand-tile { width: 34px; height: 34px; font-size: 17px; border-radius: 10px; }
+  .brand-sub { display: none; }
+  .rail-foot { flex: none; gap: 8px; align-items: center; }
+  .rail-card { padding: 0; background: none; border: 0; flex-wrap: nowrap; gap: 8px; }
+  .rail-user-copy { display: none; }
+  .rail-avatar { width: 32px; height: 32px; }
+  .rail-signout { height: 32px; padding: 0 10px; font-size: 12px; margin: 0; }
+  .install-btn { width: 100%; order: 3; }
+  .rail-foot:has(.install-btn:not([hidden])) { flex-basis: 100%; flex-wrap: wrap; justify-content: flex-end; }
+  .topbar { padding: 8px 16px; }
+  .title-side .ghost { height: 36px; font-size: 13px; }
+}
+
+@media (max-width: 640px) {
+  /* Historial como tarjetas */
+  .table { min-width: 0; }
+  .table thead { display: none; }
+  .table, .table tbody { display: block; }
+  .table tbody tr {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px;
+    padding: 14px 16px; border-bottom: 1px solid var(--line-soft);
+  }
+  .table td { padding: 0; border: 0; }
+  .table td:nth-child(1) { grid-column: 1; }
+  .table td:nth-child(6) { grid-column: 2; grid-row: 1; justify-self: end; }
+  .table td:nth-child(2) { grid-column: 1 / -1; }
+  .table td:nth-child(3) { grid-column: 1 / -1; color: var(--ink-3); }
+  .table td:nth-child(3) .td-main { font-weight: 500; }
+  .table td:nth-child(4)::before { content: 'Total '; font-family: var(--font); color: var(--muted); font-size: 12px; }
+  .table td:nth-child(5)::before { content: 'Saldo '; font-family: var(--font); color: var(--muted); font-size: 12px; }
+  .table td:nth-child(4) { grid-column: 1; text-align: left; }
+  .table td:nth-child(5) { grid-column: 2; text-align: right; }
+  .table td:nth-child(7) { grid-column: 1 / -1; }
+  .td-actions { justify-content: flex-start; }
+  .icon-btn { width: 40px; height: 40px; border-color: var(--line); }
+}
