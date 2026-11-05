@@ -2,12 +2,14 @@ import './style.css';
 import { TERMS, TERMS_CLOSING, TERMS_PARTIES, TERMS_TITLE, TERMS_VERSION } from './terms.js';
 import { mountHero } from './hero3d.js';
 import { mountSignature } from './signature.js';
-import { initAuth, getSession, signOut } from './auth.js';
+import { initAuth, getSession, getKnownUser, signOut, renderGoogleButton } from './auth.js';
+import { enqueue, listPending, removePending, updatePending, newClientId, requestPersistence, isNetworkError, isAuthError } from './queue.js';
 import { API_URL, PAYMENTS_ENABLED, createOrder, listOrders, createPaymentLink } from './api.js';
 import { initPWA } from './pwa.js';
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 const DRAFT_KEY = 'zpev-borrador';
+const HISTORY_KEY = 'zpev-historial';
 const MONTH_GOAL = 120; // referencia visual del medidor de órdenes del mes
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -17,6 +19,7 @@ const form = $('#orderForm');
 const submitBtn = $('#submitBtn');
 const submitLabel = $('.cta-label', submitBtn);
 let session = null;
+let offlineUser = null;
 let lastOrder = null;
 let historyCache = [];
 
@@ -168,20 +171,27 @@ function updatePreview() {
 const DRAFT_FIELDS = ['nombre', 'telefono', 'marca', 'serie', 'servicio', 'caracteristicas', 'llaves', 'cargador', 'otros', 'presupuesto', 'anticipo', 'total'];
 let draftTimer = 0;
 
+function saveDraftNow() {
+  clearTimeout(draftTimer);
+  writeDraft();
+}
+
 function saveDraft() {
   clearTimeout(draftTimer);
-  draftTimer = setTimeout(() => {
-    const data = Object.fromEntries(DRAFT_FIELDS.map((k) => [k, $(`#${k}`).value]));
-    const enc = form.querySelector('input[name="encendido"]:checked');
-    data.encendido = enc ? enc.value : '';
-    const empty = Object.values(data).every((x) => !x);
-    try {
-      if (empty) localStorage.removeItem(DRAFT_KEY);
-      else localStorage.setItem(DRAFT_KEY, JSON.stringify({ data, at: Date.now() }));
-    } catch (_) { /* almacenamiento no disponible */ }
-    const now = new Date();
-    $('#draftState').textContent = empty ? '' : `Borrador guardado · ${pad(now.getHours())}:${pad(now.getMinutes())}`;
-  }, 400);
+  draftTimer = setTimeout(writeDraft, 400);
+}
+
+function writeDraft() {
+  const data = Object.fromEntries(DRAFT_FIELDS.map((k) => [k, $(`#${k}`).value]));
+  const enc = form.querySelector('input[name="encendido"]:checked');
+  data.encendido = enc ? enc.value : '';
+  const empty = Object.values(data).every((x) => !x);
+  try {
+    if (empty) localStorage.removeItem(DRAFT_KEY);
+    else localStorage.setItem(DRAFT_KEY, JSON.stringify({ data, at: Date.now() }));
+  } catch (_) { /* almacenamiento no disponible */ }
+  const now = new Date();
+  $('#draftState').textContent = empty ? '' : `Borrador guardado · ${pad(now.getHours())}:${pad(now.getMinutes())}`;
 }
 
 function restoreDraft() {
@@ -313,31 +323,68 @@ function paintMonth(count) {
 }
 
 async function loadHistory() {
+  const cached = (() => { try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || 'null'); } catch (_) { return null; } })();
+  renderPending();
   session = getSession();
-  if (!session) return showLogin('Tu sesión venció. Vuelve a iniciar sesión.');
+  if (!session || !navigator.onLine) {
+    historyCache = cached?.orders || [];
+    renderHistory();
+    const when = cached?.at ? new Date(cached.at) : null;
+    $('#histEmpty').hidden = false;
+    $('#histEmpty').textContent = !navigator.onLine
+      ? `Sin conexión. ${when ? `Mostrando el historial guardado a las ${pad(when.getHours())}:${pad(when.getMinutes())}.` : 'El historial se carga al volver la señal.'}`
+      : 'Inicia sesión para actualizar el historial.';
+    if (historyCache.length) $('#histEmpty').classList.add('is-note');
+    return;
+  }
+  $('#histEmpty').classList.remove('is-note');
   $('#histEmpty').hidden = false;
   $('#histEmpty').textContent = 'Cargando órdenes…';
   try {
     const res = await listOrders(session.token);
     historyCache = res.orders || [];
+    try { localStorage.setItem(HISTORY_KEY, JSON.stringify({ at: Date.now(), orders: historyCache })); } catch (_) { /* noop */ }
     paintMonth(res.monthCount);
     renderHistory();
   } catch (err) {
-    historyCache = [];
+    historyCache = cached?.orders || [];
     renderHistory();
-    $('#histEmpty').textContent = `No se pudo cargar el historial: ${err.message}`;
+    $('#histEmpty').hidden = false;
+    $('#histEmpty').textContent = isNetworkError(err)
+      ? 'Sin conexión con la hoja. Se muestra el último historial guardado.'
+      : `No se pudo cargar el historial: ${err.message}`;
+    if (isAuthError(err)) promptLogin('Tu sesión venció. Inicia sesión para ver el historial.');
   }
 }
 $('#histSearch').addEventListener('input', renderHistory);
 $('#histReload').addEventListener('click', loadHistory);
 
-// ================= Sesión =================
+// ================= Conexión y sesión =================
 function setConnStatus() {
   const el = $('#connStatus');
+  const strip = $('#offlineStrip');
+  const online = navigator.onLine;
   if (!API_URL) { el.textContent = 'Falta la URL de Apps Script'; el.dataset.state = 'warn'; }
+  else if (!online) { el.textContent = 'Sin conexión · guardando en el teléfono'; el.dataset.state = 'warn'; }
   else if (!session) { el.textContent = 'Inicia sesión para enviar'; el.dataset.state = 'warn'; }
   else { el.textContent = 'Conectado a la hoja del taller'; el.dataset.state = 'ok'; }
+
+  const inApp = !$('.shell').hidden;
+  if (inApp && !online) {
+    strip.hidden = false;
+    strip.dataset.tone = 'offline';
+    $('#offlineText').textContent = 'Sin conexión. Las órdenes se guardan en este teléfono y se envían solas al volver la señal.';
+  } else if (inApp && online && !session) {
+    strip.hidden = false;
+    strip.dataset.tone = 'login';
+    $('#offlineText').textContent = 'Hay señal. Inicia sesión para enviar las órdenes guardadas en el teléfono.';
+  } else {
+    strip.hidden = true;
+  }
 }
+$('#offlineStrip').addEventListener('click', () => {
+  if ($('#offlineStrip').dataset.tone === 'login') promptLogin('Inicia sesión para enviar las órdenes guardadas.');
+});
 
 function paintAvatar(el, s) {
   if (s?.picture) {
@@ -356,23 +403,37 @@ function paintUser(s) {
 }
 
 let heroMounted = null;
-function showApp(s) {
-  session = s;
+function enterApp(user) {
   $('#login').hidden = true;
   $('.shell').hidden = false;
   $('#dock').hidden = false;
-  paintUser(s);
+  paintUser(user);
   setConnStatus();
   updatePreview();
   requestAnimationFrame(checkTermsRead);
   if (!heroMounted) heroMounted = mountHero($('#hero3d'));
+  renderPending();
+}
+
+function showApp(s) {
+  session = s;
+  offlineUser = null;
+  enterApp(s);
   const vista = new URLSearchParams(location.search).get('vista');
   if (vista === 'historial') setView('historial');
   else if (API_URL) listOrders(s.token, 1).then((r) => paintMonth(r.monthCount)).catch(() => {});
+  syncQueue();
+}
+
+function showOffline(user) {
+  session = null;
+  offlineUser = user;
+  enterApp(user);
 }
 
 function showLogin(message = '') {
   session = null;
+  offlineUser = null;
   $('#login').hidden = false;
   $('.shell').hidden = true;
   $('#dock').hidden = true;
@@ -381,9 +442,37 @@ function showLogin(message = '') {
   denied.textContent = message;
   denied.classList.toggle('is-hidden', !message);
   setConnStatus();
+  renderGoogleButton();
 }
 
-$('#signOutBtn').addEventListener('click', () => signOut());
+/** Pide iniciar sesión sin perder lo capturado (el borrador y la cola quedan en el teléfono). */
+function promptLogin(message) {
+  saveDraftNow();
+  showLogin(message);
+}
+
+$('#signOutBtn').addEventListener('click', async () => {
+  const pend = await listPending().catch(() => []);
+  if (pend.length && !confirm(`Hay ${pend.length} orden(es) sin enviar en este teléfono. Se conservarán y se enviarán cuando alguien inicie sesión. ¿Cerrar sesión?`)) return;
+  signOut();
+});
+
+window.addEventListener('online', () => {
+  setConnStatus();
+  if (session) syncQueue();
+  else if (offlineUser) {
+    listPending().then((p) => { if (p.length) toast(`Hay señal. Inicia sesión para enviar ${p.length} orden(es) guardada(s).`, 'warn'); });
+  }
+});
+window.addEventListener('offline', () => {
+  setConnStatus();
+  if (session === null && !offlineUser && !$('#login').hidden) {
+    const known = getKnownUser();
+    if (known) showOffline(known);
+  }
+});
+document.addEventListener('visibilitychange', () => { if (!document.hidden) syncQueue(); });
+setInterval(() => syncQueue(), 45000);
 
 // ================= Mensajes =================
 const toastEl = $('#toast');
@@ -393,7 +482,94 @@ function toast(msg, tone = 'info') {
   toastEl.dataset.tone = tone;
   toastEl.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => (toastEl.hidden = true), 4200);
+  toastTimer = setTimeout(() => (toastEl.hidden = true), 5200);
+}
+
+// ================= Cola de pendientes =================
+const fmtTime = (ms) => { const d = new Date(ms); return `${pad(d.getDate())}/${pad(d.getMonth() + 1)} ${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+
+async function renderPending() {
+  const items = await listPending().catch(() => []);
+  const n = items.length;
+  const chip = $('#pendChip');
+  chip.hidden = n === 0;
+  chip.classList.toggle('has-error', items.some((i) => i.error));
+  $('#pendChipText').textContent = `${n} por enviar`;
+
+  const card = $('#pendCard');
+  card.hidden = n === 0;
+  $('#pendNote').textContent = navigator.onLine
+    ? (session ? 'Guardadas en este teléfono · se envían solas' : 'Inicia sesión para enviarlas')
+    : 'Guardadas en este teléfono · esperando señal';
+  $('#pendSync').hidden = !(navigator.onLine && session);
+  $('#pendList').replaceChildren(...items.map((it) => {
+    const li = document.createElement('li');
+    li.className = 'pend-item' + (it.error ? ' has-error' : '');
+    const main = document.createElement('div');
+    main.className = 'pend-main';
+    const name = Object.assign(document.createElement('span'), { className: 'td-main', textContent: `${it.order.nombre} · ${it.order.marca}` });
+    const meta = Object.assign(document.createElement('span'), {
+      className: 'td-sub',
+      textContent: it.error ? `No se pudo enviar: ${it.error}` : `Capturada ${fmtTime(it.queuedAt)}${it.attempts ? ` · ${it.attempts} intento(s)` : ''}`
+    });
+    main.append(name, meta);
+    li.append(main);
+    if (it.error) {
+      const del = Object.assign(document.createElement('button'), { type: 'button', className: 'ghost pend-del', textContent: 'Descartar' });
+      del.addEventListener('click', async () => {
+        if (!confirm(`¿Descartar la orden de ${it.order.nombre}? Se borrará de este teléfono.`)) return;
+        await removePending(it.clientId);
+        renderPending();
+      });
+      li.append(del);
+    }
+    return li;
+  }));
+}
+$('#pendChip').addEventListener('click', () => { setView('historial'); syncQueue(); });
+$('#pendSync').addEventListener('click', () => syncQueue(true));
+
+let syncing = false;
+async function syncQueue(manual = false) {
+  if (syncing || !API_URL) return;
+  if (!navigator.onLine) { if (manual) toast('Sin conexión: las órdenes siguen guardadas en el teléfono.', 'warn'); return; }
+  session = getSession();
+  if (!session) {
+    const pend = await listPending().catch(() => []);
+    if (pend.length && manual) promptLogin(`Inicia sesión para enviar ${pend.length} orden(es) guardada(s).`);
+    setConnStatus();
+    return;
+  }
+  const items = await listPending().catch(() => []);
+  if (!items.length) return;
+  syncing = true;
+  $('#pendChip').classList.add('is-syncing');
+  const sent = [];
+  try {
+    for (const it of items) {
+      try {
+        const res = await createOrder(session.token, it.order);
+        await removePending(it.clientId);
+        sent.push(res.folio);
+        if (Number.isFinite(res.monthCount)) paintMonth(res.monthCount);
+      } catch (err) {
+        if (isNetworkError(err)) break;
+        if (isAuthError(err)) { promptLogin('Tu sesión venció. Inicia sesión para enviar las órdenes guardadas.'); break; }
+        it.attempts += 1;
+        it.error = err.message;
+        await updatePending(it);
+      }
+    }
+  } finally {
+    syncing = false;
+    $('#pendChip').classList.remove('is-syncing');
+    await renderPending();
+    setConnStatus();
+  }
+  if (sent.length) {
+    toast(sent.length === 1 ? `Se envió la orden guardada · ${sent[0]}` : `Se enviaron ${sent.length} órdenes guardadas · ${sent.join(', ')}`, 'ok');
+    if (!$('#view-historial').hidden) loadHistory();
+  }
 }
 
 // ================= Envío =================
@@ -406,6 +582,16 @@ const MISSING = {
   firma: 'firma del cliente'
 };
 
+async function saveOffline(order, reason) {
+  await enqueue(order);
+  requestPersistence();
+  clearDraft();
+  showSuccess({ ...order, folio: '' }, { offline: true });
+  renderPending();
+  setConnStatus();
+  if (reason) toast(reason, 'warn');
+}
+
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
   const v = values();
@@ -415,10 +601,9 @@ form.addEventListener('submit', async (e) => {
     return;
   }
   if (!API_URL) return toast('Configura VITE_API_URL con la URL de la Web App de Apps Script.', 'error');
-  session = getSession();
-  if (!session) return showLogin('Tu sesión venció. Vuelve a iniciar sesión.');
 
   const order = {
+    clientId: newClientId(),
     termsVersion: TERMS_VERSION,
     capturadoEn: new Date().toISOString(),
     fecha: v.fecha,
@@ -440,6 +625,11 @@ form.addEventListener('submit', async (e) => {
     firmaPng: signature.toDataURL()
   };
 
+  session = getSession();
+  if (!navigator.onLine || !session) {
+    return saveOffline(order, !navigator.onLine ? '' : 'Tu sesión venció: la orden quedó guardada en el teléfono. Inicia sesión para enviarla.');
+  }
+
   submitBtn.disabled = true;
   submitBtn.classList.add('is-loading');
   submitLabel.textContent = 'Guardando orden…';
@@ -450,25 +640,40 @@ form.addEventListener('submit', async (e) => {
     showSuccess(lastOrder);
     if (Number.isFinite(res.monthCount)) paintMonth(res.monthCount);
   } catch (err) {
-    toast(`No se pudo guardar: ${err.message}`, 'error');
-    submitBtn.disabled = false;
-    submitLabel.textContent = 'Enviar orden y guardar';
+    if (isNetworkError(err)) {
+      await saveOffline(order, 'Se perdió la señal: la orden quedó guardada en el teléfono y se enviará sola.');
+    } else if (isAuthError(err)) {
+      await saveOffline(order, 'Tu sesión venció: la orden quedó guardada en el teléfono. Inicia sesión para enviarla.');
+    } else {
+      toast(`No se pudo guardar: ${err.message}`, 'error');
+      submitBtn.disabled = false;
+      submitLabel.textContent = 'Enviar orden y guardar';
+    }
   } finally {
     submitBtn.classList.remove('is-loading');
+    updatePreview();
   }
 });
 
 // ================= Confirmación =================
 const overlay = $('#success');
-function showSuccess(o) {
-  $('#okFolio').textContent = o.folio;
-  const msg = `Hola ${o.nombre}, Z e-Scooters México registró tu orden ${o.folio} para ${o.marca}. `
-    + `Servicio: ${o.servicio}. Anticipo: ${fmtMXN(o.anticipo)}; saldo pendiente: ${fmtMXN(o.saldo)}. `
-    + 'Te avisaremos por este medio cuando tu vehículo esté listo. Consultas: 55 6501 8583.';
-  $('#okWa').href = waLink(o.telefono, msg);
+function showSuccess(o, { offline = false } = {}) {
+  $('#okTitle').textContent = offline ? 'Orden guardada en el teléfono' : 'Orden registrada';
+  $('#okFolio').textContent = offline ? 'Folio pendiente' : o.folio;
+  $('#okOffline').hidden = !offline;
+  $('.success-text', overlay).hidden = offline;
+  $('#okWa').hidden = offline;
+  $('.success-mark', overlay).classList.toggle('is-pending', offline);
+
+  if (!offline) {
+    const msg = `Hola ${o.nombre}, Z e-Scooters México registró tu orden ${o.folio} para ${o.marca}. `
+      + `Servicio: ${o.servicio}. Anticipo: ${fmtMXN(o.anticipo)}; saldo pendiente: ${fmtMXN(o.saldo)}. `
+      + 'Te avisaremos por este medio cuando tu vehículo esté listo. Consultas: 55 6501 8583.';
+    $('#okWa').href = waLink(o.telefono, msg);
+  }
 
   // Cobro del anticipo: integrado, oculto hasta activar VITE_PAYMENTS_ENABLED.
-  const canCharge = PAYMENTS_ENABLED && o.anticipo > 0;
+  const canCharge = PAYMENTS_ENABLED && !offline && o.anticipo > 0;
   $('#payBlock').hidden = !canCharge;
   $('#payLink').hidden = true;
   $('#payBtn').hidden = false;
@@ -482,7 +687,7 @@ function showSuccess(o) {
 $('#payBtn').addEventListener('click', async () => {
   if (!lastOrder) return;
   session = getSession();
-  if (!session) return showLogin('Tu sesión venció. Vuelve a iniciar sesión.');
+  if (!session) return promptLogin('Tu sesión venció. Vuelve a iniciar sesión.');
   const btn = $('#payBtn');
   btn.disabled = true;
   btn.textContent = 'Generando link…';
@@ -553,6 +758,14 @@ initAuth({
   clientId: GOOGLE_CLIENT_ID,
   buttonEl: $('#googleBtn'),
   onSignedIn: showApp,
+  onOffline: showOffline,
   onSignedOut: () => showLogin(),
+  onExpired: () => {
+    // No se interrumpe la captura: lo que se envíe sin sesión queda en la cola del teléfono.
+    session = null;
+    offlineUser = getKnownUser();
+    setConnStatus();
+    renderPending();
+  },
   onError: (msg) => showLogin(msg)
 });

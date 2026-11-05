@@ -28,7 +28,8 @@ const HEADERS = [
   'Presupuesto aprox. (MXN)', 'Anticipo (MXN)', 'Total (MXN)', 'Saldo pendiente (MXN)',
   'Llaves o NFC', 'Cargador', 'Otros accesorios',
   'Términos aceptados', 'Versión de términos', 'Firma (enlace)', 'Estatus', 'Capturado por',
-  'Pago anticipo', 'Referencia de pago'
+  'Pago anticipo', 'Referencia de pago',
+  'ID de captura', 'Capturado en (dispositivo)'
 ];
 const COL = HEADERS.reduce((m, h, i) => { m[h] = i; return m; }, {});
 const STATUS_OPTIONS = ['Recibido', 'En reparación', 'Listo para entrega', 'Entregado', 'Anticipo pagado'];
@@ -61,6 +62,11 @@ function doPost(e) {
     if (problem) return json_({ ok: false, error: problem });
 
     lock.waitLock(20000);
+
+    // Idempotencia: un reintento desde la cola del teléfono no duplica la orden.
+    const existing = findByClientId_(sheet, data.clientId);
+    if (existing) return json_({ ok: true, folio: existing, duplicate: true, monthCount: monthCount_(sheet) });
+
     const folio = nextFolio_(sheet);
     const firmaUrl = saveSignature_(props.getProperty('DRIVE_FOLDER_ID'), folio, data.firmaPng);
     const row = new Array(HEADERS.length).fill('');
@@ -89,6 +95,8 @@ function doPost(e) {
     set('Estatus', 'Recibido');
     set('Capturado por', email);
     set('Pago anticipo', num_(data.anticipo) > 0 ? 'Pendiente' : '');
+    set('ID de captura', clip_(data.clientId, 64));
+    set('Capturado en (dispositivo)', data.capturadoEn ? new Date(data.capturadoEn) : '');
     sheet.appendRow(row);
     SpreadsheetApp.flush();
 
@@ -133,6 +141,18 @@ function monthCount_(sheet) {
   return sheet.getRange(2, 1, last - 1, 1).getValues().filter(function (r) {
     return String(r[0]).indexOf(prefix) === 0;
   }).length;
+}
+
+function findByClientId_(sheet, clientId) {
+  if (!clientId) return '';
+  const last = sheet.getLastRow();
+  if (last < 2) return '';
+  const col = COL['ID de captura'] + 1;
+  const ids = sheet.getRange(2, col, last - 1, 1).getValues();
+  for (let i = ids.length - 1; i >= 0; i--) {
+    if (ids[i][0] === clientId) return sheet.getRange(i + 2, 1).getValue();
+  }
+  return '';
 }
 
 /* ---------- Pago del anticipo (desde Firebase) ---------- */
@@ -241,9 +261,11 @@ function getSheet_(sheetId) {
     sheet.getRange(2, COL['Presupuesto aprox. (MXN)'] + 1, sheet.getMaxRows() - 1, 4).setNumberFormat('$#,##0.00');
     const rule = SpreadsheetApp.newDataValidation().requireValueInList(STATUS_OPTIONS, true).setAllowInvalid(false).build();
     sheet.getRange(2, COL['Estatus'] + 1, sheet.getMaxRows() - 1, 1).setDataValidation(rule);
-  } else if (sheet.getLastColumn() < HEADERS.length) {
-    // Migración: hojas creadas con la versión anterior reciben las columnas nuevas.
-    sheet.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]);
+  } else if (sheet.getLastColumn() < HEADERS.length || sheet.getRange(1, HEADERS.length).getValue() !== HEADERS[HEADERS.length - 1]) {
+    // Migración: hojas creadas con una versión anterior reciben las columnas nuevas.
+    sheet.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS])
+      .setFontWeight('bold').setBackground('#0F1115').setFontColor('#D9F84A');
+    sheet.getRange(2, COL['Capturado en (dispositivo)'] + 1, sheet.getMaxRows() - 1, 1).setNumberFormat('dd/mm/yyyy hh:mm');
   }
   return sheet;
 }

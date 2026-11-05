@@ -7,13 +7,21 @@ export const API_URL = import.meta.env.VITE_API_URL || '';
 export const BILLING_URL = import.meta.env.VITE_BILLING_URL || '/billing';
 export const PAYMENTS_ENABLED = import.meta.env.VITE_PAYMENTS_ENABLED === 'true';
 
-async function postSheets(body) {
+async function postSheets(body, timeoutMs = 30000) {
   if (!API_URL) throw new Error('Falta configurar VITE_API_URL');
-  const res = await fetch(API_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify(body)
-  });
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  let res;
+  try {
+    res = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(body),
+      signal: ctrl.signal
+    });
+  } finally {
+    clearTimeout(timer);
+  }
   const json = await res.json();
   if (!json.ok) throw new Error(json.error || 'Respuesta inválida del servidor');
   return json;
