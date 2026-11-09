@@ -293,6 +293,20 @@
                   <span class="money-tag">M.N.</span>
                 </div>
               </div>
+              <div class="field span-2">
+                <span class="label" id="lbl-plan">Forma de pago</span>
+                <div class="segmented" role="radiogroup" aria-labelledby="lbl-plan">
+                  <label class="seg">
+                    <input type="radio" name="plan" value="Anticipo y liquidación" checked />
+                    <span>Anticipo y liquidación</span>
+                  </label>
+                  <label class="seg">
+                    <input type="radio" name="plan" value="Varios pagos" />
+                    <span>Varios pagos</span>
+                  </label>
+                </div>
+                <p class="hint" id="planHint">El saldo se liquida en un solo pago al entregar.</p>
+              </div>
             </div>
           </section>
 
@@ -506,6 +520,44 @@
       <a class="ghost wa-btn" id="okWa" target="_blank" rel="noopener">Enviar comprobante por WhatsApp</a>
       <button type="button" class="cta" id="newBtn"><span class="cta-label">Capturar otra orden</span></button>
     </div>
+  </div>
+
+  <!-- Registrar pago -->
+  <div class="overlay" id="payDlg" hidden>
+    <form class="success-card pay-card" id="payForm" role="dialog" aria-modal="true" aria-labelledby="payTitle" novalidate>
+      <h3 id="payTitle">Registrar pago</h3>
+      <p class="success-folio mono" id="pdFolio">ZE-</p>
+      <dl class="pd-sums">
+        <div><dt>Costo</dt><dd class="mono" id="pdTotal">$0.00</dd></div>
+        <div><dt>Pagado</dt><dd class="mono" id="pdPaid">$0.00</dd></div>
+        <div class="sum-total"><dt>Por pagar</dt><dd class="mono" id="pdDue">$0.00</dd></div>
+      </dl>
+      <div class="segmented" role="radiogroup" aria-label="Forma de pago">
+        <label class="seg"><input type="radio" name="pdPlan" value="Anticipo y liquidación" /><span>Liquidación</span></label>
+        <label class="seg"><input type="radio" name="pdPlan" value="Varios pagos" /><span>Varios pagos</span></label>
+      </div>
+      <div class="field">
+        <label for="pdMonto">Monto</label>
+        <div class="money">
+          <span class="money-sign">$</span>
+          <input id="pdMonto" class="input mono" type="number" min="0.01" step="0.01" inputmode="decimal" />
+          <span class="money-tag">M.N.</span>
+        </div>
+      </div>
+      <div class="field">
+        <label for="pdMetodo">Método</label>
+        <select id="pdMetodo" class="input">
+          <option>Efectivo</option><option>Tarjeta</option><option>Transferencia</option>
+          <option>Aplazo</option><option>Mercado Pago</option><option>Otro</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="pdNota">Nota <span class="hint-inline">opcional</span></label>
+        <input id="pdNota" class="input" type="text" maxlength="200" placeholder="Referencia, quién pagó…" />
+      </div>
+      <button type="submit" class="cta" id="pdSubmit"><span class="cta-label">Registrar pago</span></button>
+      <button type="button" class="ghost" id="pdCancel">Cancelar</button>
+    </form>
   </div>
 
   <!-- Barra inferior (móvil) -->

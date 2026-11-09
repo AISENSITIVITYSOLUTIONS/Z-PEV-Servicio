@@ -4,7 +4,7 @@ import { mountHero } from './hero3d.js';
 import { mountSignature } from './signature.js';
 import { initAuth, getSession, getKnownUser, signOut, renderGoogleButton } from './auth.js';
 import { enqueue, listPending, removePending, updatePending, newClientId, requestPersistence, isNetworkError, isAuthError } from './queue.js';
-import { API_URL, PAYMENTS_ENABLED, APLAZO_ENABLED, createOrder, listOrders, createPaymentLink, createAplazoLink, cancelAplazoLink } from './api.js';
+import { API_URL, PAYMENTS_ENABLED, APLAZO_ENABLED, createOrder, listOrders, addPayment, setPaymentPlan, completeOrder, createPaymentLink, createAplazoLink, cancelAplazoLink } from './api.js';
 import { initPWA } from './pwa.js';
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
@@ -103,6 +103,7 @@ function values() {
     anticipo: num($('#anticipo').value),
     // El costo del servicio es el total de la cuenta; lo que falta pagar = costo − anticipo.
     total: num($('#presupuesto').value),
+    plan: (form.querySelector('input[name="plan"]:checked') || {}).value || 'Anticipo y liquidación',
     aceptaTerminos: acepta.checked,
     firma: signature.hasInk()
   };
@@ -135,6 +136,9 @@ function updatePreview() {
   $('#pvPresup').textContent = fmtMXN(v.presupuesto);
   $('#pvAnticipo').textContent = fmtMXN(v.anticipo);
   $('#pvSaldo').textContent = fmtMXN(saldo);
+  $('#planHint').textContent = v.plan === 'Varios pagos'
+    ? 'El cliente puede abonar varias veces; cada pago se registra en el historial.'
+    : 'El saldo se liquida en un solo pago al entregar.';
 
   const chips = [];
   if (v.encendido) chips.push(v.encendido === 'si' ? 'Encendido' : 'Apagado');
@@ -247,21 +251,27 @@ $$('.nav-item[data-jump]').forEach((a) => a.addEventListener('click', () => { if
 
 // ================= Historial =================
 const STATUS = {
-  recibido: 'Recibido', reparacion: 'En reparación', listo: 'Listo para entrega', entregado: 'Entregado', pagado: 'Anticipo pagado'
+  recibido: 'Recibido', reparacion: 'En reparación', listo: 'Listo para entrega', entregado: 'Entregado',
+  pagado: 'Anticipo pagado', pagada: 'Pagada', completada: 'Completada'
 };
 const statusKey = (s) => {
   const t = String(s || '').toLowerCase();
+  if (t.includes('complet')) return 'completada';
+  if (t.includes('anticipo')) return 'pagado';
+  if (t.includes('pagad')) return 'pagada';
   if (t.includes('repar')) return 'reparacion';
   if (t.includes('listo')) return 'listo';
   if (t.includes('entreg')) return 'entregado';
-  if (t.includes('pagad')) return 'pagado';
   return 'recibido';
 };
+const isClosed = (o) => statusKey(o.estatus) === 'completada';
 
 function svg(path) {
   return `<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${path}</svg>`;
 }
 const ICON_WA = svg('<path d="M4 20l1.3-3.9A8 8 0 1 1 8 19z"/><path d="M9 9.5c.5 2 2.3 4 4.5 4.6l1.2-1.2 2 .9c-.2 1.3-1.4 2-2.7 1.8C10.6 15 8 12.5 7.6 9.3c-.1-1.2.6-2.4 1.8-2.6l.9 2z"/>');
+const ICON_PAY = svg('<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18M7 15h3"/>');
+const ICON_DONE = svg('<path d="M5 12.5l4.2 4.2L19 7"/>');
 const ICON_SIG = svg('<path d="M3 17c3-2 4 2 6 0s3-4 5-2 2 3 4 1"/><path d="M3 21h18"/>');
 
 function renderHistory() {
@@ -298,6 +308,20 @@ function renderHistory() {
       a.setAttribute('aria-label', `WhatsApp a ${o.cliente}`);
       actions.append(a);
     }
+    if (!isClosed(o) && num(o.saldo) > 0) {
+      const b = Object.assign(document.createElement('button'), { type: 'button', className: 'icon-btn', title: 'Registrar pago' });
+      b.innerHTML = ICON_PAY;
+      b.setAttribute('aria-label', `Registrar pago de la orden ${o.folio}`);
+      b.addEventListener('click', () => openPayDialog(o));
+      actions.append(b);
+    }
+    if (!isClosed(o) && num(o.saldo) <= 0) {
+      const b = Object.assign(document.createElement('button'), { type: 'button', className: 'icon-btn is-go', title: 'Liberar orden (completada)' });
+      b.innerHTML = ICON_DONE;
+      b.setAttribute('aria-label', `Liberar la orden ${o.folio}`);
+      b.addEventListener('click', () => releaseOrder(o, b));
+      actions.append(b);
+    }
     if (o.firmaUrl) {
       const a = Object.assign(document.createElement('a'), { className: 'icon-btn', href: o.firmaUrl, target: '_blank', rel: 'noopener', title: 'Ver firma' });
       a.innerHTML = ICON_SIG;
@@ -310,11 +334,105 @@ function renderHistory() {
   empty.hidden = rows.length > 0;
   if (!rows.length) empty.textContent = historyCache.length ? 'Ninguna orden coincide con la búsqueda.' : 'Aún no hay órdenes registradas. Captura la primera en Nueva orden.';
 
-  const open = historyCache.filter((o) => !['entregado'].includes(statusKey(o.estatus)));
+  const open = historyCache.filter((o) => !['entregado', 'completada'].includes(statusKey(o.estatus)));
   $('#stOrders').textContent = historyCache.length;
   $('#stOpen').textContent = open.length;
   $('#stAdv').textContent = fmtMXN(historyCache.reduce((a, o) => a + num(o.anticipo), 0));
   $('#stDue').textContent = fmtMXN(open.reduce((a, o) => a + num(o.saldo), 0));
+}
+
+// ----- Pagos posteriores y liberación -----
+let payOrder = null;
+const payDlg = $('#payDlg');
+
+function syncPayAmount() {
+  const due = num(payOrder?.saldo);
+  const plan = (payDlg.querySelector('input[name="pdPlan"]:checked') || {}).value;
+  const monto = $('#pdMonto');
+  if (plan !== 'Varios pagos') {
+    monto.value = due.toFixed(2);
+    monto.readOnly = true;
+  } else {
+    monto.readOnly = false;
+    if (num(monto.value) > due) monto.value = due.toFixed(2);
+  }
+  monto.max = due.toFixed(2);
+}
+
+function openPayDialog(o) {
+  payOrder = o;
+  const paid = Math.max(num(o.total) - num(o.saldo), 0);
+  $('#pdFolio').textContent = `${o.folio} · ${o.cliente}`;
+  $('#pdTotal').textContent = fmtMXN(o.total);
+  $('#pdPaid').textContent = fmtMXN(paid);
+  $('#pdDue').textContent = fmtMXN(o.saldo);
+  const plan = o.plan === 'Varios pagos' ? 'Varios pagos' : 'Anticipo y liquidación';
+  payDlg.querySelectorAll('input[name="pdPlan"]').forEach((r) => { r.checked = r.value === plan; });
+  $('#pdMonto').value = '';
+  $('#pdNota').value = '';
+  $('#pdMetodo').selectedIndex = 0;
+  syncPayAmount();
+  payDlg.hidden = false;
+  requestAnimationFrame(() => payDlg.classList.add('is-in'));
+  $('#pdMonto').focus();
+}
+
+function closePayDialog() {
+  payDlg.classList.remove('is-in');
+  payDlg.hidden = true;
+  payOrder = null;
+}
+
+payDlg.querySelectorAll('input[name="pdPlan"]').forEach((r) => r.addEventListener('change', syncPayAmount));
+$('#pdCancel').addEventListener('click', closePayDialog);
+payDlg.addEventListener('keydown', (e) => { if (e.key === 'Escape') closePayDialog(); });
+
+$('#payForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (!payOrder) return;
+  session = getSession();
+  if (!session) return promptLogin('Tu sesión venció. Vuelve a iniciar sesión.');
+  const monto = Math.round(num($('#pdMonto').value) * 100) / 100;
+  const due = num(payOrder.saldo);
+  if (!(monto > 0) || monto > due) return toast(`El monto debe ser mayor a cero y no superar ${fmtMXN(due)}.`, 'error');
+  const btn = $('#pdSubmit');
+  btn.disabled = true;
+  try {
+    const plan = (payDlg.querySelector('input[name="pdPlan"]:checked') || {}).value;
+    if (plan && plan !== (payOrder.plan || 'Anticipo y liquidación')) {
+      await setPaymentPlan(session.token, payOrder.folio, plan);
+      payOrder.plan = plan;
+    }
+    const res = await addPayment(session.token, {
+      folio: payOrder.folio, monto, metodo: $('#pdMetodo').value, nota: clean($('#pdNota').value)
+    });
+    Object.assign(payOrder, { saldo: res.saldo, abonos: res.abonos, estatus: res.estatus });
+    renderHistory();
+    const folio = payOrder.folio;
+    closePayDialog();
+    toast(res.saldo > 0
+      ? `Pago registrado en ${folio}. Por pagar: ${fmtMXN(res.saldo)}.`
+      : `${folio} quedó pagada. Usa el botón ✓ para liberarla al entregar.`, 'ok');
+  } catch (err) {
+    toast(err.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+async function releaseOrder(o, btn) {
+  session = getSession();
+  if (!session) return promptLogin('Tu sesión venció. Vuelve a iniciar sesión.');
+  btn.disabled = true;
+  try {
+    await completeOrder(session.token, o.folio);
+    o.estatus = 'Completada';
+    renderHistory();
+    toast(`${o.folio} completada y liberada.`, 'ok');
+  } catch (err) {
+    btn.disabled = false;
+    toast(err.message, 'error');
+  }
 }
 
 function paintMonth(count) {
@@ -620,6 +738,7 @@ form.addEventListener('submit', async (e) => {
     anticipo: v.anticipo,
     total: v.total,
     saldo: Math.max(v.total - v.anticipo, 0),
+    plan: v.plan,
     llaves: v.llaves,
     cargador: v.cargador,
     otros: v.otros,
@@ -793,6 +912,8 @@ function setNowDefaults() {
 
 function resetForm() {
   form.reset();
+  const planDefault = form.querySelector('input[name="plan"][value="Anticipo y liquidación"]');
+  if (planDefault) planDefault.checked = true;
   signature.clear();
   acepta.disabled = true;
   acepta.checked = false;

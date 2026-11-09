@@ -15,6 +15,8 @@ acento lima `#D9F84A`, vista previa tipo comprobante).
 - **Términos y condiciones** completos (cláusulas PRIMERA a DÉCIMA NOVENA); la casilla se habilita
   al leer hasta el final.
 - **Firma digital** en una placa 3D, exportada como PNG a Drive.
+- **Pagos y cierre**: costo del servicio − anticipo = total a pagar. Plan «Anticipo y liquidación» o «Varios pagos»;
+  cada pago queda en la hoja «Pagos». Con saldo cero la orden pasa a **Pagada** y el botón ✓ la libera como **Completada**.
 - **Historial**: últimas órdenes, búsqueda, totales (anticipos y saldo por cobrar), enlace a la firma
   y aviso al cliente por WhatsApp.
 - **Cobro del anticipo con Mercado Pago**: integrado y **oculto**; ver `docs/MERCADO_PAGO.md`.
@@ -43,7 +45,7 @@ acento lima `#D9F84A`, vista previa tipo comprobante).
    Copia la URL `/exec`.
 
 La hoja se crea sola con encabezados, formato de moneda y lista de estatus
-(Recibido, En reparación, Listo para entrega, Entregado, Anticipo pagado).
+(Recibido, En reparación, Listo para entrega, Entregado, Anticipo pagado, Pagada, Completada).
 El personal cambia el estatus directamente en la hoja; el historial lo refleja.
 
 ## 2. Inicio de sesión con Google

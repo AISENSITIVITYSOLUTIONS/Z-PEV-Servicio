@@ -4,6 +4,9 @@
  * Acciones (POST con JSON en text/plain):
  *   create   Registra una orden: folio, firma PNG en Drive y fila en la hoja "Órdenes".
  *   list     Devuelve las últimas órdenes y el conteo del mes (historial de la app).
+ *   addPayment  Registra un abono o la liquidación de un folio (hoja «Pagos») y recalcula el saldo.
+ *   complete    Libera la orden (Estatus = Completada) cuando el saldo es cero.
+ *   setPlan     Cambia el plan de pago: «Anticipo y liquidación» o «Varios pagos».
  *   payment  Uso interno de la función de cobros (Firebase): marca el pago del anticipo.
  *   aplazoGet / aplazoReserve / aplazoUpdate / aplazoPending
  *            Uso interno de la función de cobros: estado del link de Aplazo de cada folio.
@@ -33,15 +36,20 @@ const HEADERS = [
   'Pago anticipo', 'Referencia de pago',
   'ID de captura', 'Capturado en (dispositivo)',
   'Método de pago', 'Aplazo cartId', 'Aplazo loanId', 'Aplazo link', 'Aplazo monto', 'Aplazo estado',
-  'Aplazo actualizado', 'Aplazo reembolsado', 'Aplazo generado por'
+  'Aplazo actualizado', 'Aplazo reembolsado', 'Aplazo generado por',
+  'Plan de pago', 'Abonos (MXN)', 'Liberada por', 'Liberada el'
 ];
+const PAYMENTS_SHEET = 'Pagos';
+const PAYMENT_HEADERS = ['Folio', 'Fecha', 'Tipo', 'Monto (MXN)', 'Método', 'Nota', 'Registrado por', 'Saldo después (MXN)'];
+const PAYMENT_METHODS = ['Efectivo', 'Tarjeta', 'Transferencia', 'Aplazo', 'Mercado Pago', 'Otro'];
+const PLANS = ['Anticipo y liquidación', 'Varios pagos'];
 const APLAZO_FIELDS = {
   cartId: 'Aplazo cartId', loanId: 'Aplazo loanId', url: 'Aplazo link', monto: 'Aplazo monto',
   estado: 'Aplazo estado', actualizado: 'Aplazo actualizado', reembolsado: 'Aplazo reembolsado', por: 'Aplazo generado por'
 };
 const APLAZO_PENDING = ['Reservado', 'Pendiente'];
 const COL = HEADERS.reduce((m, h, i) => { m[h] = i; return m; }, {});
-const STATUS_OPTIONS = ['Recibido', 'En reparación', 'Listo para entrega', 'Entregado', 'Anticipo pagado'];
+const STATUS_OPTIONS = ['Recibido', 'En reparación', 'Listo para entrega', 'Entregado', 'Anticipo pagado', 'Pagada', 'Completada'];
 
 function doGet() {
   return json_({ ok: true, service: 'z-pev-servicio', time: new Date().toISOString() });
@@ -66,6 +74,12 @@ function doPost(e) {
 
     const sheet = getSheet_(props.getProperty('SHEET_ID'));
     if (action === 'list') return json_(listOrders_(sheet, data.limit));
+    if (action === 'addPayment' || action === 'complete' || action === 'setPlan') {
+      lock.waitLock(20000);
+      if (action === 'addPayment') return json_(addPayment_(sheet, data, email));
+      if (action === 'setPlan') return json_(setPlan_(sheet, data));
+      return json_(completeOrder_(sheet, data, email));
+    }
     if (action !== 'create') return json_({ ok: false, error: 'Acción no reconocida.' });
 
     const problem = validate_(data);
@@ -107,6 +121,8 @@ function doPost(e) {
     set('Pago anticipo', num_(data.anticipo) > 0 ? 'Pendiente' : '');
     set('ID de captura', clip_(data.clientId, 64));
     set('Capturado en (dispositivo)', data.capturadoEn ? new Date(data.capturadoEn) : '');
+    set('Plan de pago', PLANS.indexOf(data.plan) >= 0 ? data.plan : PLANS[0]);
+    set('Abonos (MXN)', 0);
     sheet.appendRow(row);
     SpreadsheetApp.flush();
 
@@ -138,7 +154,9 @@ function listOrders_(sheet, limit) {
       saldo: num_(r[COL['Saldo pendiente (MXN)']]),
       estatus: r[COL['Estatus']],
       pago: r[COL['Pago anticipo']],
-      firmaUrl: r[COL['Firma (enlace)']]
+      firmaUrl: r[COL['Firma (enlace)']],
+      plan: r[COL['Plan de pago']] || PLANS[0],
+      abonos: num_(r[COL['Abonos (MXN)']])
     };
   });
   return { ok: true, orders: orders, monthCount: monthCount_(sheet) };
@@ -163,6 +181,90 @@ function findByClientId_(sheet, clientId) {
     if (ids[i][0] === clientId) return sheet.getRange(i + 2, 1).getValue();
   }
   return '';
+}
+
+/* ---------- Pagos posteriores y cierre ---------- */
+
+function orderRow_(sheet, folio) {
+  const last = sheet.getLastRow();
+  if (!folio || last < 2) return 0;
+  const folios = sheet.getRange(2, 1, last - 1, 1).getValues();
+  for (let i = folios.length - 1; i >= 0; i--) if (folios[i][0] === folio) return i + 2;
+  return 0;
+}
+
+function paymentsSheet_(sheet) {
+  const ss = sheet.getParent();
+  let p = ss.getSheetByName(PAYMENTS_SHEET);
+  if (!p) {
+    p = ss.insertSheet(PAYMENTS_SHEET);
+    p.appendRow(PAYMENT_HEADERS);
+    p.setFrozenRows(1);
+    p.getRange(1, 1, 1, PAYMENT_HEADERS.length).setFontWeight('bold').setBackground('#0F1115').setFontColor('#D9F84A');
+    p.getRange(2, 2, p.getMaxRows() - 1, 1).setNumberFormat('dd/mm/yyyy hh:mm');
+    p.getRange(2, 4, p.getMaxRows() - 1, 1).setNumberFormat('$#,##0.00');
+    p.getRange(2, 8, p.getMaxRows() - 1, 1).setNumberFormat('$#,##0.00');
+  }
+  return p;
+}
+
+function orderSummary_(sheet, r) {
+  const v = sheet.getRange(r, 1, 1, HEADERS.length).getValues()[0];
+  return {
+    folio: v[COL['Folio']], total: num_(v[COL['Total (MXN)']]), anticipo: num_(v[COL['Anticipo (MXN)']]),
+    abonos: num_(v[COL['Abonos (MXN)']]), saldo: num_(v[COL['Saldo pendiente (MXN)']]),
+    estatus: v[COL['Estatus']], plan: v[COL['Plan de pago']] || PLANS[0]
+  };
+}
+
+/** Abono o liquidación. Saldo = Total − Anticipo − Abonos. Con saldo cero, Estatus = Pagada. */
+function addPayment_(sheet, data, email) {
+  const r = orderRow_(sheet, data.folio);
+  if (!r) return { ok: false, error: 'Folio no encontrado.' };
+  const o = orderSummary_(sheet, r);
+  if (o.estatus === 'Completada') return { ok: false, error: 'La orden ya está completada y liberada.' };
+  const monto = num_(data.monto);
+  const saldo = Math.max(Math.round((o.total - o.anticipo - o.abonos) * 100) / 100, 0);
+  if (saldo <= 0) return { ok: false, error: 'Esta orden no tiene saldo pendiente.' };
+  if (!(monto > 0)) return { ok: false, error: 'Indica el monto del pago.' };
+  if (monto > saldo) return { ok: false, error: 'El pago supera el saldo pendiente (' + saldo.toFixed(2) + ' MXN).' };
+  if (o.plan !== 'Varios pagos' && monto !== saldo) {
+    return { ok: false, error: 'Con plan «Anticipo y liquidación» el pago debe cubrir el saldo completo (' + saldo.toFixed(2) + ' MXN). Cambia el plan a «Varios pagos» para abonar.' };
+  }
+  const metodo = PAYMENT_METHODS.indexOf(data.metodo) >= 0 ? data.metodo : 'Otro';
+  const nuevoSaldo = Math.round((saldo - monto) * 100) / 100;
+  const abonos = Math.round((o.abonos + monto) * 100) / 100;
+  paymentsSheet_(sheet).appendRow([o.folio, new Date(), nuevoSaldo === 0 ? 'Liquidación' : 'Abono', monto, metodo,
+    clip_(data.nota, 200), email, nuevoSaldo]);
+  sheet.getRange(r, COL['Abonos (MXN)'] + 1).setValue(abonos);
+  sheet.getRange(r, COL['Saldo pendiente (MXN)'] + 1).setValue(nuevoSaldo);
+  if (nuevoSaldo === 0) sheet.getRange(r, COL['Estatus'] + 1).setValue('Pagada');
+  SpreadsheetApp.flush();
+  return { ok: true, folio: o.folio, saldo: nuevoSaldo, abonos: abonos, estatus: nuevoSaldo === 0 ? 'Pagada' : o.estatus };
+}
+
+/** Cambia el plan de pago de un folio (por ejemplo, a «Varios pagos» si el cliente abonará). */
+function setPlan_(sheet, data) {
+  const r = orderRow_(sheet, data.folio);
+  if (!r) return { ok: false, error: 'Folio no encontrado.' };
+  if (PLANS.indexOf(data.plan) === -1) return { ok: false, error: 'Plan de pago no válido.' };
+  sheet.getRange(r, COL['Plan de pago'] + 1).setValue(data.plan);
+  return { ok: true, plan: data.plan };
+}
+
+/** Libera la orden: requiere saldo cero. */
+function completeOrder_(sheet, data, email) {
+  const r = orderRow_(sheet, data.folio);
+  if (!r) return { ok: false, error: 'Folio no encontrado.' };
+  const o = orderSummary_(sheet, r);
+  if (o.estatus === 'Completada') return { ok: true, estatus: 'Completada' };
+  const saldo = Math.max(Math.round((o.total - o.anticipo - o.abonos) * 100) / 100, 0);
+  if (saldo > 0) return { ok: false, error: 'No se puede liberar: falta pagar ' + saldo.toFixed(2) + ' MXN.' };
+  sheet.getRange(r, COL['Estatus'] + 1).setValue('Completada');
+  sheet.getRange(r, COL['Liberada por'] + 1).setValue(email);
+  sheet.getRange(r, COL['Liberada el'] + 1).setValue(new Date());
+  SpreadsheetApp.flush();
+  return { ok: true, estatus: 'Completada' };
 }
 
 /* ---------- Pago del anticipo (desde Firebase) ---------- */
@@ -356,6 +458,10 @@ function getSheet_(sheetId) {
     sheet.getRange(2, COL['Aplazo actualizado'] + 1, sheet.getMaxRows() - 1, 1).setNumberFormat('dd/mm/yyyy hh:mm');
     sheet.getRange(2, COL['Aplazo monto'] + 1, sheet.getMaxRows() - 1, 1).setNumberFormat('$#,##0.00');
     sheet.getRange(2, COL['Aplazo reembolsado'] + 1, sheet.getMaxRows() - 1, 1).setNumberFormat('$#,##0.00');
+    sheet.getRange(2, COL['Abonos (MXN)'] + 1, sheet.getMaxRows() - 1, 1).setNumberFormat('$#,##0.00');
+    sheet.getRange(2, COL['Liberada el'] + 1, sheet.getMaxRows() - 1, 1).setNumberFormat('dd/mm/yyyy hh:mm');
+    const rule = SpreadsheetApp.newDataValidation().requireValueInList(STATUS_OPTIONS, true).setAllowInvalid(false).build();
+    sheet.getRange(2, COL['Estatus'] + 1, sheet.getMaxRows() - 1, 1).setDataValidation(rule);
   }
   return sheet;
 }
