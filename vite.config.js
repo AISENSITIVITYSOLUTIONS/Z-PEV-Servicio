@@ -39,7 +39,7 @@ export default defineConfig({
       workbox: {
         globPatterns: ['**/*.{js,css,html,png,svg,woff2,webmanifest}'],
         navigateFallback: '/index.html',
-        navigateFallbackDenylist: [/^\/billing/],
+        navigateFallbackDenylist: [/^\/billing/, /^\/pago\.html/],
         cleanupOutdatedCaches: true,
         runtimeCaching: [
           {

@@ -1,57 +1,29 @@
 'use strict';
-// Cobro del anticipo de una orden de servicio con Mercado Pago (pago único, Checkout Pro).
+// Cobro del anticipo de una orden de servicio: Mercado Pago (Checkout Pro) y Aplazo (Online API).
 //
 // Rutas (Firebase Hosting reescribe /billing/** a esta función):
 //   POST /billing/checkout  Personal autenticado con Google → preferencia de pago → init_point.
 //   POST /billing/webhook   Notificación de MP → firma x-signature → reconsulta del pago → hoja.
 //   GET  /billing/health    Estado de la configuración (sin secretos).
+//   *    /billing/aplazo/** Pago a plazos con Aplazo; ver aplazo.js y docs/APLAZO.md.
 //
 // La función queda inactiva mientras PAYMENTS_ENABLED no sea "true": responde 403 y la
 // interfaz tampoco muestra el bloque de cobro (VITE_PAYMENTS_ENABLED).
 
-const { OAuth2Client } = require('google-auth-library');
 const { verifySignature } = require('./webhook-signature');
+const { env, isTrue, send, FOLIO_RE, verifyStaff, notifySheets } = require('./common');
+const aplazo = require('./aplazo');
 
 const MP_API = 'https://api.mercadopago.com';
-const oauth = new OAuth2Client();
-
-const env = (k, d = '') => String(process.env[k] ?? d).trim();
-const isTrue = (k) => env(k).toLowerCase() === 'true';
-const send = (res, code, body) => res.status(code).json(body);
-
-async function verifyStaff(req) {
-  const m = String(req.get('authorization') || '').match(/^Bearer\s+(.+)$/i);
-  if (!m) throw Object.assign(new Error('Sesión no iniciada.'), { code: 401 });
-  const ticket = await oauth.verifyIdToken({ idToken: m[1], audience: env('GOOGLE_CLIENT_ID') });
-  const p = ticket.getPayload() || {};
-  const email = String(p.email || '').toLowerCase();
-  const allowed = env('ALLOWED_EMAILS').split(',').map((x) => x.trim().toLowerCase()).filter(Boolean);
-  if (!p.email_verified || !allowed.includes(email)) {
-    throw Object.assign(new Error('Tu cuenta no tiene acceso a cobros.'), { code: 403 });
-  }
-  return email;
-}
 
 async function mp(path, { method = 'GET', body, idempotencyKey } = {}) {
-  const token = env('MERCADOPAGO_ACCESS_TOKEN').replace(/^﻿/, '');
+  const token = env('MERCADOPAGO_ACCESS_TOKEN');
   const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
   if (idempotencyKey) headers['X-Idempotency-Key'] = idempotencyKey;
   const res = await fetch(`${MP_API}${path}`, { method, headers, body: body ? JSON.stringify(body) : undefined });
   const json = await res.json().catch(() => ({}));
   if (!res.ok) throw Object.assign(new Error(json.message || `Mercado Pago respondió ${res.status}`), { code: 502, mp: json });
   return json;
-}
-
-async function notifySheets(payload) {
-  const url = env('SHEETS_API_URL');
-  if (!url) return { ok: false, error: 'SHEETS_API_URL vacío' };
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify({ action: 'payment', token: env('SHEETS_WEBHOOK_TOKEN'), ...payload }),
-    redirect: 'follow'
-  });
-  return res.json().catch(() => ({ ok: false }));
 }
 
 async function checkout(req, res) {
@@ -61,7 +33,7 @@ async function checkout(req, res) {
   const { folio, amount, nombre, telefono, concepto } = req.body || {};
   const value = Math.round(Number(amount) * 100) / 100;
   const max = Number(env('MP_MAX_AMOUNT_MXN', '50000'));
-  if (!/^ZE-\d{8}-\d{4}$/.test(String(folio || ''))) return send(res, 400, { error: 'Folio inválido.' });
+  if (!FOLIO_RE.test(String(folio || ''))) return send(res, 400, { error: 'Folio inválido.' });
   if (!Number.isFinite(value) || value < 1 || value > max) return send(res, 400, { error: `Monto fuera de rango (1–${max} MXN).` });
 
   if (isTrue('BILLING_MOCK')) {
@@ -113,9 +85,9 @@ async function webhook(req, res) {
   // Nunca se confía en el cuerpo de la notificación: se reconsulta el pago en la API.
   const pay = await mp(`/v1/payments/${encodeURIComponent(dataId)}`);
   const folio = String(pay.external_reference || '');
-  if (!/^ZE-\d{8}-\d{4}$/.test(folio)) return send(res, 200, { ignored: true });
+  if (!FOLIO_RE.test(folio)) return send(res, 200, { ignored: true });
 
-  const r = await notifySheets({ folio, status: pay.status, paymentId: String(pay.id), amount: pay.transaction_amount });
+  const r = await notifySheets({ folio, status: pay.status, paymentId: String(pay.id), amount: pay.transaction_amount, method: 'Mercado Pago' });
   if (!r.ok) console.error('No se actualizó la hoja', folio, r.error);
   return send(res, 200, { ok: true });
 }
@@ -129,9 +101,11 @@ async function handler(req, res) {
         mock: isTrue('BILLING_MOCK'),
         accessToken: Boolean(env('MERCADOPAGO_ACCESS_TOKEN')),
         webhookSecret: Boolean(env('MP_WEBHOOK_SECRET')),
-        sheets: Boolean(env('SHEETS_API_URL') && env('SHEETS_WEBHOOK_TOKEN'))
+        sheets: Boolean(env('SHEETS_API_URL') && env('SHEETS_WEBHOOK_TOKEN')),
+        aplazo: aplazo.health()
       });
     }
+    if (path.startsWith('/aplazo/')) return await aplazo.route(req, res, path.slice('/aplazo'.length));
     if (req.method === 'POST' && path === '/checkout') return await checkout(req, res);
     if (req.method === 'POST' && path === '/webhook') return await webhook(req, res);
     return send(res, 404, { error: 'Ruta no encontrada.' });

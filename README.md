@@ -18,6 +18,7 @@ acento lima `#D9F84A`, vista previa tipo comprobante).
 - **Historial**: últimas órdenes, búsqueda, totales (anticipos y saldo por cobrar), enlace a la firma
   y aviso al cliente por WhatsApp.
 - **Cobro del anticipo con Mercado Pago**: integrado y **oculto**; ver `docs/MERCADO_PAGO.md`.
+- **Pago a plazos con Aplazo** («¿No tienes tarjeta de crédito?»): integrado y **oculto**; ver `docs/APLAZO.md`.
 
 ## Arquitectura
 
@@ -25,7 +26,8 @@ acento lima `#D9F84A`, vista previa tipo comprobante).
 |---|---|---|
 | Frontend | Vite + JS + three.js → Firebase Hosting | Formulario, firma, historial |
 | Registro | Google Apps Script + Sheets + Drive | Folio `ZE-AAAAMMDD-NNNN`, filas, firmas |
-| Cobros | Firebase Function `billing` (Node 22) | Checkout Pro + webhook firmado |
+| Cobros | Firebase Function `billing` (Node 22) | Mercado Pago (Checkout Pro) y Aplazo (Online API), webhooks |
+| Conciliación | Firebase Function `aplazoSweep` (cada 60 min) | Pagos de Aplazo sin webhook y links vencidos |
 
 ## 1. Google Sheets y Apps Script
 
