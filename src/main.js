@@ -4,7 +4,7 @@ import { mountHero } from './hero3d.js';
 import { mountSignature } from './signature.js';
 import { initAuth, getSession, getKnownUser, signOut, renderGoogleButton } from './auth.js';
 import { enqueue, listPending, removePending, updatePending, newClientId, requestPersistence, isNetworkError, isAuthError } from './queue.js';
-import { API_URL, PAYMENTS_ENABLED, createOrder, listOrders, createPaymentLink } from './api.js';
+import { API_URL, PAYMENTS_ENABLED, APLAZO_ENABLED, createOrder, listOrders, createPaymentLink, createAplazoLink, cancelAplazoLink } from './api.js';
 import { initPWA } from './pwa.js';
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
@@ -672,11 +672,17 @@ function showSuccess(o, { offline = false } = {}) {
     $('#okWa').href = waLink(o.telefono, msg);
   }
 
-  // Cobro del anticipo: integrado, oculto hasta activar VITE_PAYMENTS_ENABLED.
-  const canCharge = PAYMENTS_ENABLED && !offline && o.anticipo > 0;
-  $('#payBlock').hidden = !canCharge;
+  // Cobro del anticipo: Mercado Pago (VITE_PAYMENTS_ENABLED) y pago a plazos con Aplazo (VITE_APLAZO_ENABLED).
+  const canCharge = !offline && o.anticipo > 0;
+  const showMp = PAYMENTS_ENABLED && canCharge;
+  const showAplazo = APLAZO_ENABLED && canCharge && o.anticipo >= 100;
+  $('#payBlock').hidden = !(showMp || showAplazo);
+  $('#payMp').hidden = !showMp;
+  $('#payAplazo').hidden = !showAplazo;
   $('#payLink').hidden = true;
   $('#payBtn').hidden = false;
+  $('#bnplLink').hidden = true;
+  $('#bnplBtn').hidden = false;
   $('#payAmount').textContent = fmtMXN(o.anticipo);
 
   overlay.hidden = false;
@@ -717,6 +723,58 @@ $('#payCopy').addEventListener('click', async () => {
     toast('Link copiado.', 'ok');
   } catch (_) {
     $('#payUrl').select();
+  }
+});
+
+// ----- Pago a plazos con Aplazo -----
+$('#bnplBtn').addEventListener('click', async () => {
+  if (!lastOrder) return;
+  session = getSession();
+  if (!session) return promptLogin('Tu sesión venció. Vuelve a iniciar sesión.');
+  const btn = $('#bnplBtn');
+  btn.disabled = true;
+  btn.textContent = 'Generando link…';
+  try {
+    const { url, reused } = await createAplazoLink(session.token, {
+      folio: lastOrder.folio,
+      amount: lastOrder.anticipo,
+      nombre: lastOrder.nombre,
+      telefono: lastOrder.telefono,
+      concepto: `Anticipo orden ${lastOrder.folio} · ${lastOrder.marca}`
+    });
+    $('#bnplUrl').value = url;
+    $('#bnplWa').href = waLink(lastOrder.telefono, `Hola ${lastOrder.nombre}, ¿no tienes tarjeta de crédito? Puedes pagar el anticipo de ${fmtMXN(lastOrder.anticipo)} de tu orden ${lastOrder.folio} a plazos con Aplazo aquí: ${url}`);
+    $('#bnplLink').hidden = false;
+    btn.hidden = true;
+    if (reused) toast('Este folio ya tenía un link de Aplazo vigente; se reutilizó.', 'ok');
+  } catch (err) {
+    toast(err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Generar link de pago a plazos';
+  }
+});
+
+$('#bnplCopy').addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText($('#bnplUrl').value);
+    toast('Link copiado.', 'ok');
+  } catch (_) {
+    $('#bnplUrl').select();
+  }
+});
+
+$('#bnplCancel').addEventListener('click', async () => {
+  if (!lastOrder) return;
+  session = getSession();
+  if (!session) return promptLogin('Tu sesión venció. Vuelve a iniciar sesión.');
+  try {
+    await cancelAplazoLink(session.token, lastOrder.folio);
+    $('#bnplLink').hidden = true;
+    $('#bnplBtn').hidden = false;
+    toast('Link de Aplazo cancelado.', 'ok');
+  } catch (err) {
+    toast(err.message, 'error');
   }
 });
 

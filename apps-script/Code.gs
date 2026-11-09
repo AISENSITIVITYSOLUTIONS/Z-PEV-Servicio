@@ -5,6 +5,8 @@
  *   create   Registra una orden: folio, firma PNG en Drive y fila en la hoja "Órdenes".
  *   list     Devuelve las últimas órdenes y el conteo del mes (historial de la app).
  *   payment  Uso interno de la función de cobros (Firebase): marca el pago del anticipo.
+ *   aplazoGet / aplazoReserve / aplazoUpdate / aplazoPending
+ *            Uso interno de la función de cobros: estado del link de Aplazo de cada folio.
  *
  * Acceso del personal: cada petición create/list lleva el ID token de Google. Se verifica
  * con tokeninfo (aud = GOOGLE_CLIENT_ID, correo verificado, vigencia) y contra ALLOWED_EMAILS.
@@ -29,8 +31,15 @@ const HEADERS = [
   'Llaves o NFC', 'Cargador', 'Otros accesorios',
   'Términos aceptados', 'Versión de términos', 'Firma (enlace)', 'Estatus', 'Capturado por',
   'Pago anticipo', 'Referencia de pago',
-  'ID de captura', 'Capturado en (dispositivo)'
+  'ID de captura', 'Capturado en (dispositivo)',
+  'Método de pago', 'Aplazo cartId', 'Aplazo loanId', 'Aplazo link', 'Aplazo monto', 'Aplazo estado',
+  'Aplazo actualizado', 'Aplazo reembolsado', 'Aplazo generado por'
 ];
+const APLAZO_FIELDS = {
+  cartId: 'Aplazo cartId', loanId: 'Aplazo loanId', url: 'Aplazo link', monto: 'Aplazo monto',
+  estado: 'Aplazo estado', actualizado: 'Aplazo actualizado', reembolsado: 'Aplazo reembolsado', por: 'Aplazo generado por'
+};
+const APLAZO_PENDING = ['Reservado', 'Pendiente'];
 const COL = HEADERS.reduce((m, h, i) => { m[h] = i; return m; }, {});
 const STATUS_OPTIONS = ['Recibido', 'En reparación', 'Listo para entrega', 'Entregado', 'Anticipo pagado'];
 
@@ -46,6 +55,7 @@ function doPost(e) {
     const action = data.action || 'create';
 
     if (action === 'payment') return json_(recordPayment_(data, props));
+    if (action.indexOf('aplazo') === 0) return json_(aplazo_(action, data, props, lock));
 
     let email;
     try {
@@ -171,10 +181,87 @@ function recordPayment_(data, props) {
       sheet.getRange(r, COL['Pago anticipo'] + 1).setValue(approved ? 'Pagado' : String(data.status || ''));
       sheet.getRange(r, COL['Referencia de pago'] + 1).setValue(String(data.paymentId || ''));
       if (approved) sheet.getRange(r, COL['Estatus'] + 1).setValue('Anticipo pagado');
+      if (data.method) sheet.getRange(r, COL['Método de pago'] + 1).setValue(String(data.method).slice(0, 40));
       return { ok: true };
     }
   }
   return { ok: false, error: 'Folio no encontrado.' };
+}
+
+/* ---------- Aplazo (desde Firebase) ---------- */
+
+function aplazo_(action, data, props, lock) {
+  const secret = props.getProperty('SHEETS_WEBHOOK_TOKEN');
+  if (!secret || data.token !== secret) return { ok: false, status: 401, error: 'No autorizado.' };
+  const sheet = getSheet_(props.getProperty('SHEET_ID'));
+  if (action === 'aplazoPending') return { ok: true, rows: aplazoPending_(sheet) };
+
+  const r = rowOfFolio_(sheet, data.folio);
+  if (!r) return { ok: false, status: 404, error: 'Folio no encontrado.' };
+  if (action === 'aplazoGet') return { ok: true, aplazo: readAplazo_(sheet, r) };
+
+  lock.waitLock(20000);
+  const cur = readAplazo_(sheet, r);
+  if (action === 'aplazoReserve') {
+    if ((cur.cartId || '') !== (data.expectedPrev || '')) {
+      return { ok: false, status: 409, error: 'Otro link de Aplazo se generó al mismo tiempo. Intenta de nuevo.' };
+    }
+    writeAplazo_(sheet, r, { cartId: data.cartId, loanId: '', url: '', monto: num_(data.monto), estado: 'Reservado', reembolsado: 0 });
+    return { ok: true };
+  }
+  if (action === 'aplazoUpdate') {
+    if (cur.cartId !== data.cartId && !data.force) return { ok: true, ignored: 'carrito reemplazado' };
+    const fields = Object.assign({}, data.fields || {});
+    if (cur.cartId !== data.cartId) fields.cartId = data.cartId; // pago de un carrito anterior: se registra igual
+    writeAplazo_(sheet, r, fields);
+    return { ok: true };
+  }
+  return { ok: false, status: 400, error: 'Acción de Aplazo no reconocida.' };
+}
+
+function rowOfFolio_(sheet, folio) {
+  const last = sheet.getLastRow();
+  if (!folio || last < 2) return 0;
+  const folios = sheet.getRange(2, 1, last - 1, 1).getValues();
+  for (let i = folios.length - 1; i >= 0; i--) if (folios[i][0] === folio) return i + 2;
+  return 0;
+}
+
+function readAplazo_(sheet, r) {
+  const v = sheet.getRange(r, 1, 1, HEADERS.length).getValues()[0];
+  const out = {};
+  Object.keys(APLAZO_FIELDS).forEach(function (k) { out[k] = v[COL[APLAZO_FIELDS[k]]]; });
+  out.cartId = String(out.cartId || '');
+  out.loanId = String(out.loanId || '');
+  out.estado = String(out.estado || '');
+  out.monto = num_(out.monto);
+  out.reembolsado = num_(out.reembolsado);
+  out.actualizado = out.actualizado instanceof Date ? out.actualizado.toISOString() : String(out.actualizado || '');
+  return out;
+}
+
+function writeAplazo_(sheet, r, fields) {
+  fields.actualizado = new Date();
+  Object.keys(fields).forEach(function (k) {
+    if (!APLAZO_FIELDS[k]) return;
+    const v = fields[k];
+    sheet.getRange(r, COL[APLAZO_FIELDS[k]] + 1).setValue(typeof v === 'string' ? clip_(v, 500) : v);
+  });
+  SpreadsheetApp.flush();
+}
+
+function aplazoPending_(sheet) {
+  const last = sheet.getLastRow();
+  if (last < 2) return [];
+  const values = sheet.getRange(2, 1, last - 1, HEADERS.length).getValues();
+  const rows = [];
+  values.forEach(function (v, i) {
+    if (APLAZO_PENDING.indexOf(String(v[COL['Aplazo estado']])) === -1) return;
+    const a = readAplazo_(sheet, i + 2);
+    a.folio = v[COL['Folio']];
+    rows.push(a);
+  });
+  return rows;
 }
 
 /* ---------- Acceso ---------- */
@@ -266,6 +353,9 @@ function getSheet_(sheetId) {
     sheet.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS])
       .setFontWeight('bold').setBackground('#0F1115').setFontColor('#D9F84A');
     sheet.getRange(2, COL['Capturado en (dispositivo)'] + 1, sheet.getMaxRows() - 1, 1).setNumberFormat('dd/mm/yyyy hh:mm');
+    sheet.getRange(2, COL['Aplazo actualizado'] + 1, sheet.getMaxRows() - 1, 1).setNumberFormat('dd/mm/yyyy hh:mm');
+    sheet.getRange(2, COL['Aplazo monto'] + 1, sheet.getMaxRows() - 1, 1).setNumberFormat('$#,##0.00');
+    sheet.getRange(2, COL['Aplazo reembolsado'] + 1, sheet.getMaxRows() - 1, 1).setNumberFormat('$#,##0.00');
   }
   return sheet;
 }

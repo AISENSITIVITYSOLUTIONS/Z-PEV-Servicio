@@ -490,12 +490,26 @@
       <p class="success-text">Quedó guardada en la hoja del taller con la firma del cliente.</p>
       <div class="pay-block" id="payBlock" hidden>
         <div class="pay-row"><span>Anticipo a cobrar</span><span class="mono" id="payAmount">$0.00</span></div>
-        <button type="button" class="ghost pay-btn" id="payBtn">Generar link de pago del anticipo</button>
-        <div class="pay-link" id="payLink" hidden>
-          <input class="input mono" id="payUrl" readonly aria-label="Link de pago" />
-          <button type="button" class="ghost" id="payCopy">Copiar</button>
-          <a class="ghost" id="payWa" target="_blank" rel="noopener">Enviar por WhatsApp</a>
+        <div class="pay-mp" id="payMp" hidden>
+          <button type="button" class="ghost pay-btn" id="payBtn">Generar link de pago del anticipo</button>
+          <div class="pay-link" id="payLink" hidden>
+            <input class="input mono" id="payUrl" readonly aria-label="Link de pago" />
+            <button type="button" class="ghost" id="payCopy">Copiar</button>
+            <a class="ghost" id="payWa" target="_blank" rel="noopener">Enviar por WhatsApp</a>
+          </div>
         </div>
+        <section class="pay-bnpl" id="payAplazo" aria-labelledby="bnplTitle" hidden>
+          <h4 id="bnplTitle">¿No tienes tarjeta de crédito?</h4>
+          <p>Te ayudamos con un pago a plazos: el cliente paga el anticipo en quincenas con <strong>Aplazo</strong>, sin tarjeta de crédito.</p>
+          <button type="button" class="ghost pay-btn" id="bnplBtn">Generar link de pago a plazos</button>
+          <div class="pay-link" id="bnplLink" hidden>
+            <input class="input mono" id="bnplUrl" readonly aria-label="Link de pago a plazos" />
+            <button type="button" class="ghost" id="bnplCopy">Copiar</button>
+            <a class="ghost" id="bnplWa" target="_blank" rel="noopener">Enviar por WhatsApp</a>
+            <button type="button" class="link-btn" id="bnplCancel">Cancelar este link</button>
+          </div>
+          <p class="pay-note">Aplazo sujeto a aprobación. Montos de $100 en adelante.</p>
+        </section>
       </div>
       <a class="ghost wa-btn" id="okWa" target="_blank" rel="noopener">Enviar comprobante por WhatsApp</a>
       <button type="button" class="cta" id="newBtn"><span class="cta-label">Capturar otra orden</span></button>

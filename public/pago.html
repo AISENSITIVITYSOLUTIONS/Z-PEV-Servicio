@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="es-MX">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex" />
+  <title>Pago del anticipo · Z e-Scooters México</title>
+  <link rel="icon" type="image/png" href="/icons/favicon-64.png" />
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@500&display=swap" rel="stylesheet" />
+  <style>
+    :root { --paper: #F3F2EE; --card: #FFFFFF; --ink: #0F1115; --ink-3: #5B5F66; --line: #E2E0DA; --lime: #D9F84A; --bad: #B42318; }
+    * { box-sizing: border-box; margin: 0; }
+    body { min-height: 100vh; display: grid; place-items: center; padding: 16px; background: var(--paper);
+      font-family: 'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif; color: var(--ink); }
+    main { width: min(420px, 100%); padding: 24px; border-radius: 16px; background: var(--card); border: 1px solid var(--line);
+      display: flex; flex-direction: column; gap: 10px; text-align: center; }
+    img { width: 96px; height: auto; margin: 0 auto 4px; object-fit: contain; }
+    h1 { font-size: 20px; font-weight: 600; letter-spacing: -.02em; }
+    p { font-size: 14px; line-height: 1.5; color: var(--ink-3); }
+    .folio { font-family: 'Geist Mono', ui-monospace, monospace; font-size: 13px; color: var(--ink); }
+    .mark { width: 10px; height: 10px; border-radius: 50%; margin: 0 auto; background: var(--lime); }
+    .mark.bad { background: var(--bad); }
+    a { color: var(--ink); font-weight: 600; }
+  </style>
+</head>
+<body>
+  <main>
+    <img src="/brand/z-logo.png" alt="Z e-Scooters México" />
+    <span class="mark" id="mark"></span>
+    <h1 id="title">Gracias</h1>
+    <p id="text">Recibimos tu solicitud.</p>
+    <p class="folio" id="folio"></p>
+    <p>Dudas: <a href="https://wa.me/525565018583">WhatsApp 55 6501 8583</a></p>
+  </main>
+  <script>
+    (function () {
+      var q = new URLSearchParams(location.search);
+      var estado = q.get('estado');
+      var folio = (q.get('folio') || '').replace(/[^A-Z0-9-]/g, '');
+      var msg = {
+        ok: ['¡Listo! Tu pago está en proceso', 'Aplazo nos confirmará el pago del anticipo y te avisaremos por WhatsApp. Puedes cerrar esta ventana.'],
+        error: ['No se completó el pago', 'No se realizó ningún cargo. Puedes intentarlo de nuevo con el mismo link o pedirnos otra forma de pago.'],
+        carrito: ['Pago pendiente', 'Tu link sigue vigente: ábrelo de nuevo cuando quieras terminar el pago del anticipo.']
+      }[estado] || ['Pago del anticipo', 'Si tienes dudas sobre tu orden, escríbenos.'];
+      document.getElementById('title').textContent = msg[0];
+      document.getElementById('text').textContent = msg[1];
+      if (folio) document.getElementById('folio').textContent = 'Orden ' + folio;
+      if (estado === 'error') document.getElementById('mark').className = 'mark bad';
+    })();
+  </script>
+</body>
+</html>
