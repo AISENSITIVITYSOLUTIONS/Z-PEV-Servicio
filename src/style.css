@@ -767,3 +767,5 @@ textarea.input { height: auto; min-height: 84px; padding: 11px 14px; line-height
   .toast { left: 12px; right: 12px; transform: none; max-width: none; animation-name: toast-in-m; }
 }
 @keyframes toast-in-m { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+.hint-inline { margin-left: 6px; font-weight: 400; font-size: 11.5px; color: var(--ink-3); }

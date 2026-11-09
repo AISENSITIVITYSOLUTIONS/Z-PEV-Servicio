@@ -101,7 +101,8 @@ function values() {
     otros: clean($('#otros').value),
     presupuesto: num($('#presupuesto').value),
     anticipo: num($('#anticipo').value),
-    total: num($('#total').value),
+    // El costo del servicio es el total de la cuenta; lo que falta pagar = costo − anticipo.
+    total: num($('#presupuesto').value),
     aceptaTerminos: acepta.checked,
     firma: signature.hasInk()
   };
@@ -157,18 +158,18 @@ function updatePreview() {
   $$('.checklist li').forEach((li) => li.classList.toggle('is-done', Boolean(checks[li.dataset.check])));
   const overpaid = v.anticipo > v.total && v.total > 0;
   submitBtn.disabled = !ok || overpaid;
-  submitLabel.textContent = overpaid ? 'El anticipo supera el total' : ok ? 'Enviar orden y guardar' : 'Completa la orden para enviar';
+  submitLabel.textContent = overpaid ? 'El anticipo supera el costo' : ok ? 'Enviar orden y guardar' : 'Completa la orden para enviar';
 
   const done = Object.values(checks).filter(Boolean).length;
   const dockCta = $('#dockCta');
   dockCta.disabled = !ok || overpaid;
   dockCta.classList.toggle('is-ready', ok && !overpaid);
   $('#dockProgress').textContent = `${done}/6`;
-  $('#dockLabel').textContent = overpaid ? 'Anticipo mayor al total' : ok ? 'Enviar orden' : 'Completa la orden';
+  $('#dockLabel').textContent = overpaid ? 'Anticipo mayor al costo' : ok ? 'Enviar orden' : 'Completa la orden';
 }
 
 // ================= Borrador automático =================
-const DRAFT_FIELDS = ['nombre', 'telefono', 'marca', 'serie', 'servicio', 'caracteristicas', 'llaves', 'cargador', 'otros', 'presupuesto', 'anticipo', 'total'];
+const DRAFT_FIELDS = ['nombre', 'telefono', 'marca', 'serie', 'servicio', 'caracteristicas', 'llaves', 'cargador', 'otros', 'presupuesto', 'anticipo'];
 let draftTimer = 0;
 
 function saveDraftNow() {
@@ -219,7 +220,7 @@ form.addEventListener('input', () => { updatePreview(); saveDraft(); });
 form.addEventListener('change', () => { updatePreview(); saveDraft(); });
 $('#telefono').addEventListener('input', (e) => { e.target.value = digits(e.target.value).slice(0, 10); });
 $('#halfBtn').addEventListener('click', () => {
-  $('#anticipo').value = (Math.round(num($('#total').value) * 50) / 100).toFixed(2);
+  $('#anticipo').value = (Math.round(num($('#presupuesto').value) * 50) / 100).toFixed(2);
   updatePreview();
   saveDraft();
 });
@@ -271,7 +272,7 @@ function renderHistory() {
     const tr = document.createElement('tr');
     const key = statusKey(o.estatus);
     const msg = key === 'listo'
-      ? `Hola ${o.cliente}, tu ${o.marca} (orden ${o.folio}) ya está listo para recoger en Z e-Scooters México, Av. Patriotismo 176. Horario: L–V 10:00–19:00, S 10:00–15:00. Saldo pendiente: ${fmtMXN(o.saldo)}.`
+      ? `Hola ${o.cliente}, tu ${o.marca} (orden ${o.folio}) ya está listo para recoger en Z e-Scooters México, Av. Patriotismo 176. Horario: L–V 10:00–19:00, S 10:00–15:00. Total a pagar: ${fmtMXN(o.saldo)}.`
       : `Hola ${o.cliente}, te escribimos de Z e-Scooters México sobre tu orden ${o.folio} (${o.marca}).`;
     tr.innerHTML = `
       <td><div class="td-main mono"></div><div class="td-sub"></div></td>
@@ -667,7 +668,7 @@ function showSuccess(o, { offline = false } = {}) {
 
   if (!offline) {
     const msg = `Hola ${o.nombre}, Z e-Scooters México registró tu orden ${o.folio} para ${o.marca}. `
-      + `Servicio: ${o.servicio}. Anticipo: ${fmtMXN(o.anticipo)}; saldo pendiente: ${fmtMXN(o.saldo)}. `
+      + `Servicio: ${o.servicio}. Costo: ${fmtMXN(o.total)}; anticipo: ${fmtMXN(o.anticipo)}; total a pagar: ${fmtMXN(o.saldo)}. `
       + 'Te avisaremos por este medio cuando tu vehículo esté listo. Consultas: 55 6501 8583.';
     $('#okWa').href = waLink(o.telefono, msg);
   }

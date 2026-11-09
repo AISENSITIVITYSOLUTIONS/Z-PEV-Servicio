@@ -269,7 +269,7 @@
             </header>
             <div class="grid grid-2">
               <div class="field span-2">
-                <label for="presupuesto">Costo de presupuesto aproximado</label>
+                <label for="presupuesto">Costo del servicio</label>
                 <div class="money">
                   <span class="money-sign">$</span>
                   <input id="presupuesto" name="presupuesto" class="input mono" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00" />
@@ -283,21 +283,13 @@
                   <input id="anticipo" name="anticipo" class="input mono" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00" />
                   <span class="money-tag">M.N.</span>
                 </div>
-                <button type="button" class="link-btn is-hidden" id="halfBtn">Usar 50 % del total</button>
+                <button type="button" class="link-btn is-hidden" id="halfBtn">Usar 50 % del costo</button>
               </div>
               <div class="field">
-                <label for="total">Total</label>
-                <div class="money">
-                  <span class="money-sign">$</span>
-                  <input id="total" name="total" class="input mono" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00" />
-                  <span class="money-tag">M.N.</span>
-                </div>
-              </div>
-              <div class="field span-2">
-                <label for="saldo">Saldo pendiente</label>
+                <label for="saldo">Total a pagar <span class="hint-inline">costo − anticipo</span></label>
                 <div class="money is-readonly">
                   <span class="money-sign">$</span>
-                  <input id="saldo" name="saldo" class="input mono" type="text" readonly tabindex="-1" value="0.00" />
+                  <input id="saldo" name="saldo" class="input mono" type="text" readonly tabindex="-1" value="0.00" aria-live="polite" />
                   <span class="money-tag">M.N.</span>
                 </div>
               </div>
@@ -391,9 +383,9 @@
               <div class="rule"></div>
 
               <dl class="sums">
-                <div><dt>Presupuesto aprox.</dt><dd class="mono" id="pvPresup">$0.00</dd></div>
+                <div><dt>Costo del servicio</dt><dd class="mono" id="pvPresup">$0.00</dd></div>
                 <div><dt>Anticipo</dt><dd class="mono" id="pvAnticipo">$0.00</dd></div>
-                <div class="sum-total"><dt>Saldo pendiente</dt><dd class="mono" id="pvSaldo">$0.00</dd></div>
+                <div class="sum-total"><dt>Total a pagar</dt><dd class="mono" id="pvSaldo">$0.00</dd></div>
               </dl>
 
               <div class="sig-preview" id="pvSigBox">
@@ -454,7 +446,7 @@
           <div class="stat"><span class="k">Órdenes</span><span class="stat-v mono" id="stOrders">—</span></div>
           <div class="stat"><span class="k">En taller</span><span class="stat-v mono" id="stOpen">—</span></div>
           <div class="stat"><span class="k">Anticipos</span><span class="stat-v mono" id="stAdv">—</span></div>
-          <div class="stat"><span class="k">Saldo por cobrar</span><span class="stat-v mono" id="stDue">—</span></div>
+          <div class="stat"><span class="k">Por cobrar</span><span class="stat-v mono" id="stDue">—</span></div>
         </div>
 
         <div class="table-card">
@@ -464,8 +456,8 @@
                 <th scope="col">Folio</th>
                 <th scope="col">Cliente</th>
                 <th scope="col">Vehículo</th>
-                <th scope="col" class="num">Total</th>
-                <th scope="col" class="num">Saldo</th>
+                <th scope="col" class="num">Costo</th>
+                <th scope="col" class="num">Por pagar</th>
                 <th scope="col">Estatus</th>
                 <th scope="col"><span class="sr-only">Acciones</span></th>
               </tr>
