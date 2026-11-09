@@ -8,6 +8,13 @@
     ],
     "rewrites": [
       {
+        "source": "/billing/aplazo/**",
+        "function": {
+          "functionId": "aplazo",
+          "region": "us-central1"
+        }
+      },
+      {
         "source": "/billing/**",
         "function": {
           "functionId": "billing",

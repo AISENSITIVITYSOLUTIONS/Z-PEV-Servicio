@@ -26,7 +26,8 @@ acento lima `#D9F84A`, vista previa tipo comprobante).
 |---|---|---|
 | Frontend | Vite + JS + three.js → Firebase Hosting | Formulario, firma, historial |
 | Registro | Google Apps Script + Sheets + Drive | Folio `ZE-AAAAMMDD-NNNN`, filas, firmas |
-| Cobros | Firebase Function `billing` (Node 22) | Mercado Pago (Checkout Pro) y Aplazo (Online API), webhooks |
+| Cobros | Firebase Function `billing` (Node 22) | Mercado Pago (Checkout Pro), oculto |
+| Pago a plazos | Firebase Function `aplazo` (Node 22) | Aplazo (Online API) y su webhook |
 | Conciliación | Firebase Function `aplazoSweep` (cada 60 min) | Pagos de Aplazo sin webhook y links vencidos |
 
 ## 1. Google Sheets y Apps Script

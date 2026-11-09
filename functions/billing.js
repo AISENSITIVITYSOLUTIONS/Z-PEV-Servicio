@@ -1,18 +1,16 @@
 'use strict';
-// Cobro del anticipo de una orden de servicio: Mercado Pago (Checkout Pro) y Aplazo (Online API).
+// Cobro del anticipo de una orden de servicio con Mercado Pago (pago único, Checkout Pro).
 //
 // Rutas (Firebase Hosting reescribe /billing/** a esta función):
 //   POST /billing/checkout  Personal autenticado con Google → preferencia de pago → init_point.
 //   POST /billing/webhook   Notificación de MP → firma x-signature → reconsulta del pago → hoja.
 //   GET  /billing/health    Estado de la configuración (sin secretos).
-//   *    /billing/aplazo/** Pago a plazos con Aplazo; ver aplazo.js y docs/APLAZO.md.
 //
 // La función queda inactiva mientras PAYMENTS_ENABLED no sea "true": responde 403 y la
 // interfaz tampoco muestra el bloque de cobro (VITE_PAYMENTS_ENABLED).
 
 const { verifySignature } = require('./webhook-signature');
 const { env, isTrue, send, FOLIO_RE, verifyStaff, notifySheets } = require('./common');
-const aplazo = require('./aplazo');
 
 const MP_API = 'https://api.mercadopago.com';
 
@@ -101,11 +99,9 @@ async function handler(req, res) {
         mock: isTrue('BILLING_MOCK'),
         accessToken: Boolean(env('MERCADOPAGO_ACCESS_TOKEN')),
         webhookSecret: Boolean(env('MP_WEBHOOK_SECRET')),
-        sheets: Boolean(env('SHEETS_API_URL') && env('SHEETS_WEBHOOK_TOKEN')),
-        aplazo: aplazo.health()
+        sheets: Boolean(env('SHEETS_API_URL') && env('SHEETS_WEBHOOK_TOKEN'))
       });
     }
-    if (path.startsWith('/aplazo/')) return await aplazo.route(req, res, path.slice('/aplazo'.length));
     if (req.method === 'POST' && path === '/checkout') return await checkout(req, res);
     if (req.method === 'POST' && path === '/webhook') return await webhook(req, res);
     return send(res, 404, { error: 'Ruta no encontrada.' });
