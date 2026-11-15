@@ -560,6 +560,24 @@
     </form>
   </div>
 
+  <!-- Servicio concluido y entregado -->
+  <div class="overlay" id="doneDlg" hidden>
+    <div class="success-card pay-card" role="dialog" aria-modal="true" aria-labelledby="doneTitle">
+      <h3 id="doneTitle">Concluir y entregar</h3>
+      <p class="success-folio mono" id="dnFolio">ZE-</p>
+      <dl class="pd-sums">
+        <div><dt>Costo</dt><dd class="mono" id="dnTotal">$0.00</dd></div>
+        <div><dt>Pagado</dt><dd class="mono" id="dnPaid">$0.00</dd></div>
+        <div class="sum-total"><dt>Saldo</dt><dd class="mono">$0.00</dd></div>
+      </dl>
+      <p class="success-text" id="dnText">El servicio quedará como concluido y entregado, y se generará el comprobante digital con este folio.</p>
+      <button type="button" class="cta" id="dnConfirm"><span class="cta-label">Confirmar entrega</span></button>
+      <a class="cta wa-cta" id="dnWa" target="_blank" rel="noopener" hidden><span class="cta-label">Enviar comprobante por WhatsApp</span></a>
+      <a class="ghost" id="dnPdf" target="_blank" rel="noopener" hidden>Ver comprobante del cliente</a>
+      <button type="button" class="ghost" id="dnClose">Cancelar</button>
+    </div>
+  </div>
+
   <!-- Barra inferior (móvil) -->
   <nav class="dock" id="dock" aria-label="Acciones rápidas" hidden>
     <button type="button" class="dock-tab is-active" data-view="orden" aria-label="Nueva orden">

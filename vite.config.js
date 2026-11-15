@@ -4,13 +4,16 @@ import { VitePWA } from 'vite-plugin-pwa';
 export default defineConfig({
   build: {
     chunkSizeWarningLimit: 700,
-    rollupOptions: { output: { manualChunks: { three: ['three'] } } }
+    rollupOptions: {
+      input: { main: 'index.html', comprobante: 'comprobante.html' },
+      output: { manualChunks: { three: ['three'] } }
+    }
   },
   plugins: [
     VitePWA({
       registerType: 'prompt',
       injectRegister: false,
-      includeAssets: ['brand/z-logo.png', 'icons/apple-touch-icon.png', 'icons/favicon-64.png'],
+      includeAssets: ['brand/z-logo.png', 'brand/sello-entrega.png', 'icons/apple-touch-icon.png', 'icons/favicon-64.png'],
       manifest: {
         id: '/',
         name: 'Z-PEV Servicio · Z e-Scooters México',
@@ -39,7 +42,7 @@ export default defineConfig({
       workbox: {
         globPatterns: ['**/*.{js,css,html,png,svg,woff2,webmanifest}'],
         navigateFallback: '/index.html',
-        navigateFallbackDenylist: [/^\/billing/, /^\/pago\.html/],
+        navigateFallbackDenylist: [/^\/billing/, /^\/pago\.html/, /^\/comprobante\.html/],
         cleanupOutdatedCaches: true,
         runtimeCaching: [
           {

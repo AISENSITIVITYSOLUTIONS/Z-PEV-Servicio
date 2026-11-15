@@ -16,7 +16,7 @@ acento lima `#D9F84A`, vista previa tipo comprobante).
   al leer hasta el final.
 - **Firma digital** en una placa 3D, exportada como PNG a Drive.
 - **Pagos y cierre**: costo del servicio − anticipo = total a pagar. Plan «Anticipo y liquidación» o «Varios pagos»;
-  cada pago queda en la hoja «Pagos». Con saldo cero la orden pasa a **Pagada** y el botón ✓ la libera como **Completada**.
+  cada pago queda en la hoja «Pagos». Con saldo cero la orden pasa a **Pagada**; el botón ✓ la concluye y entrega (**Completada**), genera el comprobante digital en PDF con el mismo folio y lo envía al cliente por WhatsApp.
 - **Historial**: últimas órdenes, búsqueda, totales (anticipos y saldo por cobrar), enlace a la firma
   y aviso al cliente por WhatsApp.
 - **Cobro del anticipo con Mercado Pago**: integrado y **oculto**; ver `docs/MERCADO_PAGO.md`.

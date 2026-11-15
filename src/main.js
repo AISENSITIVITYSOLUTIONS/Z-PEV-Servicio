@@ -252,7 +252,7 @@ $$('.nav-item[data-jump]').forEach((a) => a.addEventListener('click', () => { if
 // ================= Historial =================
 const STATUS = {
   recibido: 'Recibido', reparacion: 'En reparación', listo: 'Listo para entrega', entregado: 'Entregado',
-  pagado: 'Anticipo pagado', pagada: 'Pagada', completada: 'Completada'
+  pagado: 'Anticipo pagado', pagada: 'Pagada', completada: 'Concluido y entregado'
 };
 const statusKey = (s) => {
   const t = String(s || '').toLowerCase();
@@ -272,6 +272,7 @@ function svg(path) {
 const ICON_WA = svg('<path d="M4 20l1.3-3.9A8 8 0 1 1 8 19z"/><path d="M9 9.5c.5 2 2.3 4 4.5 4.6l1.2-1.2 2 .9c-.2 1.3-1.4 2-2.7 1.8C10.6 15 8 12.5 7.6 9.3c-.1-1.2.6-2.4 1.8-2.6l.9 2z"/>');
 const ICON_PAY = svg('<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18M7 15h3"/>');
 const ICON_DONE = svg('<path d="M5 12.5l4.2 4.2L19 7"/>');
+const ICON_RCPT = svg('<path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/>');
 const ICON_SIG = svg('<path d="M3 17c3-2 4 2 6 0s3-4 5-2 2 3 4 1"/><path d="M3 21h18"/>');
 
 function renderHistory() {
@@ -316,10 +317,17 @@ function renderHistory() {
       actions.append(b);
     }
     if (!isClosed(o) && num(o.saldo) <= 0) {
-      const b = Object.assign(document.createElement('button'), { type: 'button', className: 'icon-btn is-go', title: 'Liberar orden (completada)' });
+      const b = Object.assign(document.createElement('button'), { type: 'button', className: 'icon-btn is-go', title: 'Concluir y entregar' });
       b.innerHTML = ICON_DONE;
-      b.setAttribute('aria-label', `Liberar la orden ${o.folio}`);
-      b.addEventListener('click', () => releaseOrder(o, b));
+      b.setAttribute('aria-label', `Concluir y entregar la orden ${o.folio}`);
+      b.addEventListener('click', () => openDoneDialog(o));
+      actions.append(b);
+    }
+    if (isClosed(o)) {
+      const b = Object.assign(document.createElement('button'), { type: 'button', className: 'icon-btn', title: 'Comprobante de entrega' });
+      b.innerHTML = ICON_RCPT;
+      b.setAttribute('aria-label', `Comprobante de entrega de la orden ${o.folio}`);
+      b.addEventListener('click', () => openDoneDialog(o));
       actions.append(b);
     }
     if (o.firmaUrl) {
@@ -412,7 +420,7 @@ $('#payForm').addEventListener('submit', async (e) => {
     closePayDialog();
     toast(res.saldo > 0
       ? `Pago registrado en ${folio}. Por pagar: ${fmtMXN(res.saldo)}.`
-      : `${folio} quedó pagada. Usa el botón ✓ para liberarla al entregar.`, 'ok');
+      : `${folio} quedó pagada. Usa el botón ✓ para concluir y entregar.`, 'ok');
   } catch (err) {
     toast(err.message, 'error');
   } finally {
@@ -420,20 +428,81 @@ $('#payForm').addEventListener('submit', async (e) => {
   }
 });
 
-async function releaseOrder(o, btn) {
+// ----- Servicio concluido y entregado: comprobante digital -----
+const doneDlg = $('#doneDlg');
+let doneOrder = null;
+
+function deliveryMessage(o, url) {
+  const nombre = String(o.cliente || '').trim().split(/\s+/)[0] || 'cliente';
+  return `Estimado(a) ${nombre}:\n\n`
+    + `Le confirmamos que el servicio de su *${o.marca}* fue *concluido y entregado*.\n\n`
+    + `*Folio:* ${o.folio}\n`
+    + `*Costo del servicio:* ${fmtMXN(o.total)} · pagado en su totalidad\n`
+    + `*Entrega:* ${o.entregada || new Date().toLocaleDateString('es-MX')}\n\n`
+    + `Su comprobante digital de entrega está disponible aquí:\n${url}\n\n`
+    + `Gracias por confiar su vehículo a *Z e-Scooters México*. Quedamos a sus órdenes en este mismo número.`;
+}
+
+function showDelivered(o, url) {
+  $('#doneTitle').textContent = 'Servicio concluido y entregado';
+  $('#dnText').textContent = 'Envía al cliente el comprobante digital con el mismo folio de la orden.';
+  $('#dnConfirm').hidden = true;
+  const link = o.receiptUrl || url;
+  $('#dnPdf').href = link;
+  $('#dnPdf').hidden = !link;
+  const tel = digits(o.telefono);
+  $('#dnWa').hidden = tel.length !== 10;
+  if (tel.length === 10) $('#dnWa').href = waLink(tel, deliveryMessage(o, link));
+  $('#dnClose').textContent = 'Cerrar';
+}
+
+function openDoneDialog(o) {
+  doneOrder = o;
+  $('#dnFolio').textContent = `${o.folio} · ${o.cliente}`;
+  $('#dnTotal').textContent = fmtMXN(o.total);
+  $('#dnPaid').textContent = fmtMXN(o.total);
+  $('#doneTitle').textContent = 'Concluir y entregar';
+  $('#dnText').textContent = 'El servicio quedará como concluido y entregado, y se generará el comprobante digital con este folio.';
+  $('#dnConfirm').hidden = false;
+  $('#dnConfirm').disabled = false;
+  $('.cta-label', $('#dnConfirm')).textContent = isClosed(o) ? 'Obtener comprobante' : 'Confirmar entrega';
+  $('#dnWa').hidden = true;
+  $('#dnPdf').hidden = true;
+  $('#dnClose').textContent = 'Cancelar';
+  if (isClosed(o) && (o.receiptUrl || o.comprobanteUrl)) showDelivered(o, o.comprobanteUrl);
+  doneDlg.hidden = false;
+  requestAnimationFrame(() => doneDlg.classList.add('is-in'));
+}
+
+function closeDoneDialog() {
+  doneDlg.classList.remove('is-in');
+  doneDlg.hidden = true;
+  doneOrder = null;
+}
+$('#dnClose').addEventListener('click', closeDoneDialog);
+doneDlg.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDoneDialog(); });
+
+$('#dnConfirm').addEventListener('click', async () => {
+  if (!doneOrder) return;
   session = getSession();
   if (!session) return promptLogin('Tu sesión venció. Vuelve a iniciar sesión.');
+  const btn = $('#dnConfirm');
   btn.disabled = true;
+  $('.cta-label', btn).textContent = 'Generando comprobante…';
   try {
-    await completeOrder(session.token, o.folio);
-    o.estatus = 'Completada';
+    const res = await completeOrder(session.token, doneOrder.folio);
+    Object.assign(doneOrder, {
+      estatus: 'Completada', comprobanteUrl: res.comprobanteUrl, receiptUrl: res.receiptUrl || '',
+      entregada: res.entregada || doneOrder.entregada
+    });
     renderHistory();
-    toast(`${o.folio} completada y liberada.`, 'ok');
+    showDelivered(doneOrder, res.comprobanteUrl);
   } catch (err) {
     btn.disabled = false;
+    $('.cta-label', btn).textContent = 'Confirmar entrega';
     toast(err.message, 'error');
   }
-}
+});
 
 function paintMonth(count) {
   if (!Number.isFinite(count)) return;

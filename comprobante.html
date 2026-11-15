@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="es-MX">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="robots" content="noindex, nofollow" />
+  <meta name="theme-color" content="#0E1013" />
+  <title>Comprobante de entrega · Z e-Scooters México</title>
+  <link rel="icon" type="image/png" href="/icons/favicon-64.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@500;600&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <main class="stage" id="stage">
+    <header class="maker">
+      <img src="/brand/z-logo.png" alt="Z e-Scooters México" width="56" height="45" />
+      <div><strong>Z e-Scooters México</strong><span>Servicio técnico de vehículos eléctricos</span></div>
+    </header>
+
+    <article class="ticket is-loading" id="ticket" aria-live="polite">
+      <div class="sheen" aria-hidden="true"></div>
+
+      <section class="head">
+        <p class="eyebrow">Comprobante de entrega</p>
+        <h1>Servicio concluido<br /><em>y entregado</em></h1>
+        <div class="rule" aria-hidden="true"><span></span><span></span></div>
+        <div class="seal"><svg class="seal-svg" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240">
+  <defs>
+    <radialGradient id="s-ring" cx="38%" cy="30%" r="80%">
+      <stop offset="0" stop-color="#FFFFFF"/><stop offset=".35" stop-color="#DADDE2"/>
+      <stop offset=".7" stop-color="#9EA3AB"/><stop offset="1" stop-color="#6E737B"/>
+    </radialGradient>
+    <linearGradient id="s-bevel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity=".9"/><stop offset="1" stop-color="#4C5057" stop-opacity=".6"/>
+    </linearGradient>
+    <radialGradient id="s-core" cx="40%" cy="32%" r="75%">
+      <stop offset="0" stop-color="#FF5A61"/><stop offset=".55" stop-color="#D7262E"/><stop offset="1" stop-color="#8E141A"/>
+    </radialGradient>
+    <radialGradient id="s-gloss" cx="40%" cy="20%" r="60%">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity=".55"/><stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="s-drop" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="6" stdDeviation="6" flood-color="#000" flood-opacity=".28"/>
+    </filter>
+    <filter id="s-inset"><feDropShadow dx="0" dy="2" stdDeviation="1.4" flood-color="#000" flood-opacity=".45"/></filter>
+    <path id="s-arc" d="M120,120 m-86,0 a86,86 0 1,1 172,0 a86,86 0 1,1 -172,0"/>
+  </defs>
+  <g filter="url(#s-drop)">
+    <circle cx="120" cy="120" r="108" fill="url(#s-ring)"/>
+    <circle cx="120" cy="120" r="108" fill="none" stroke="url(#s-bevel)" stroke-width="3"/>
+    <circle cx="120" cy="120" r="97" fill="none" stroke="#7D828A" stroke-width="1.2" stroke-dasharray="1.5 3.2"/>
+    <text font-family="Helvetica, Arial, sans-serif" font-size="13.5" font-weight="700" fill="#3A3E45">
+      <textPath href="#s-arc" startOffset="0" textLength="532" lengthAdjust="spacing">SERVICIO CONCLUIDO · ENTREGADO · PAGADO ·</textPath>
+    </text>
+    <circle cx="120" cy="120" r="70" fill="#5C6067"/>
+    <circle cx="120" cy="121.5" r="67" fill="url(#s-core)"/>
+    <circle cx="120" cy="120" r="67" fill="none" stroke="#FFFFFF" stroke-opacity=".35" stroke-width="1.5"/>
+    <path d="M90 122 l20 20 l42 -44" fill="none" stroke="#FFFFFF" stroke-width="13" stroke-linecap="round" stroke-linejoin="round" filter="url(#s-inset)"/>
+    <ellipse cx="108" cy="88" rx="44" ry="24" fill="url(#s-gloss)"/>
+  </g>
+</svg></div>
+      </section>
+
+      <section class="folio-row">
+        <div>
+          <p class="label">Folio de la orden</p>
+          <p class="folio" id="folio">ZE-········-····</p>
+        </div>
+        <p class="paid" id="paid"><span class="dot" aria-hidden="true"></span>Pagado en su totalidad</p>
+      </section>
+
+      <section class="block">
+        <dl class="facts">
+          <div><dt>Cliente</dt><dd id="cliente">&nbsp;</dd></div>
+          <div><dt>Vehículo</dt><dd id="vehiculo">&nbsp;</dd></div>
+          <div class="wide"><dt>Servicio realizado</dt><dd id="servicio">&nbsp;</dd></div>
+          <div><dt>Recepción</dt><dd id="recepcion">&nbsp;</dd></div>
+          <div><dt>Entrega</dt><dd id="entrega">&nbsp;</dd></div>
+        </dl>
+      </section>
+
+      <section class="block">
+        <p class="label">Pagos recibidos</p>
+        <div class="table-wrap">
+          <table class="pays">
+            <thead><tr><th>Concepto</th><th>Fecha</th><th>Método</th><th class="n">Monto</th></tr></thead>
+            <tbody id="pays"></tbody>
+          </table>
+        </div>
+        <dl class="totals">
+          <div><dt>Costo del servicio</dt><dd id="total">$0.00</dd></div>
+          <div><dt>Total pagado</dt><dd id="pagado">$0.00</dd></div>
+          <div class="grand"><dt>Saldo pendiente</dt><dd id="saldo">$0.00</dd></div>
+        </dl>
+      </section>
+
+      <section class="thanks">
+        <p>Gracias por confiarnos su vehículo. Cada servicio se revisa, se prueba y se entrega con el mismo cuidado con el que lo recibimos.</p>
+        <p class="sign">— Equipo Z e-Scooters México</p>
+      </section>
+
+      <section class="actions">
+        <a class="btn primary" id="pdf" target="_blank" rel="noopener" hidden>Descargar comprobante en PDF</a>
+        <a class="btn" href="https://wa.me/525565018583" target="_blank" rel="noopener">Escríbenos por WhatsApp</a>
+      </section>
+
+      <footer class="foot">
+        <p>Av. Patriotismo 176, Ciudad de México · 55 6501 8583</p>
+        <p>Comprobante digital verificado, emitido por Z-PEV Servicio. Complementa la orden de servicio y no sustituye a la factura (CFDI).</p>
+      </footer>
+    </article>
+
+    <article class="ticket notice" id="notice" hidden>
+      <h1>Comprobante no disponible</h1>
+      <p id="noticeText">El enlace no es válido o el servicio aún no ha sido entregado.</p>
+      <a class="btn" href="https://wa.me/525565018583" target="_blank" rel="noopener">Escríbenos por WhatsApp</a>
+    </article>
+  </main>
+  <script type="module" src="/src/comprobante.js"></script>
+</body>
+</html>
