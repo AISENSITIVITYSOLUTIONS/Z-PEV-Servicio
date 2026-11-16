@@ -4,7 +4,7 @@ import { mountHero } from './hero3d.js';
 import { mountSignature } from './signature.js';
 import { initAuth, getSession, getKnownUser, signOut, renderGoogleButton } from './auth.js';
 import { enqueue, listPending, removePending, updatePending, newClientId, requestPersistence, isNetworkError, isAuthError } from './queue.js';
-import { API_URL, PAYMENTS_ENABLED, APLAZO_ENABLED, createOrder, listOrders, createPaymentLink, createAplazoLink, cancelAplazoLink } from './api.js';
+import { API_URL, PAYMENTS_ENABLED, APLAZO_ENABLED, createOrder, listOrders, addPayment, setPaymentPlan, completeOrder, deleteOrder, createPaymentLink, createAplazoLink, cancelAplazoLink } from './api.js';
 import { initPWA } from './pwa.js';
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
@@ -22,6 +22,7 @@ let session = null;
 let offlineUser = null;
 let lastOrder = null;
 let historyCache = [];
+let isAdmin = false;
 
 const fmtMXN = (n) => Number(n || 0).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
 const num = (v) => {
@@ -101,7 +102,9 @@ function values() {
     otros: clean($('#otros').value),
     presupuesto: num($('#presupuesto').value),
     anticipo: num($('#anticipo').value),
-    total: num($('#total').value),
+    // El costo del servicio es el total de la cuenta; lo que falta pagar = costo − anticipo.
+    total: num($('#presupuesto').value),
+    plan: (form.querySelector('input[name="plan"]:checked') || {}).value || 'Anticipo y liquidación',
     aceptaTerminos: acepta.checked,
     firma: signature.hasInk()
   };
@@ -134,6 +137,9 @@ function updatePreview() {
   $('#pvPresup').textContent = fmtMXN(v.presupuesto);
   $('#pvAnticipo').textContent = fmtMXN(v.anticipo);
   $('#pvSaldo').textContent = fmtMXN(saldo);
+  $('#planHint').textContent = v.plan === 'Varios pagos'
+    ? 'El cliente puede abonar varias veces; cada pago se registra en el historial.'
+    : 'El saldo se liquida en un solo pago al entregar.';
 
   const chips = [];
   if (v.encendido) chips.push(v.encendido === 'si' ? 'Encendido' : 'Apagado');
@@ -157,18 +163,18 @@ function updatePreview() {
   $$('.checklist li').forEach((li) => li.classList.toggle('is-done', Boolean(checks[li.dataset.check])));
   const overpaid = v.anticipo > v.total && v.total > 0;
   submitBtn.disabled = !ok || overpaid;
-  submitLabel.textContent = overpaid ? 'El anticipo supera el total' : ok ? 'Enviar orden y guardar' : 'Completa la orden para enviar';
+  submitLabel.textContent = overpaid ? 'El anticipo supera el costo' : ok ? 'Enviar orden y guardar' : 'Completa la orden para enviar';
 
   const done = Object.values(checks).filter(Boolean).length;
   const dockCta = $('#dockCta');
   dockCta.disabled = !ok || overpaid;
   dockCta.classList.toggle('is-ready', ok && !overpaid);
   $('#dockProgress').textContent = `${done}/6`;
-  $('#dockLabel').textContent = overpaid ? 'Anticipo mayor al total' : ok ? 'Enviar orden' : 'Completa la orden';
+  $('#dockLabel').textContent = overpaid ? 'Anticipo mayor al costo' : ok ? 'Enviar orden' : 'Completa la orden';
 }
 
 // ================= Borrador automático =================
-const DRAFT_FIELDS = ['nombre', 'telefono', 'marca', 'serie', 'servicio', 'caracteristicas', 'llaves', 'cargador', 'otros', 'presupuesto', 'anticipo', 'total'];
+const DRAFT_FIELDS = ['nombre', 'telefono', 'marca', 'serie', 'servicio', 'caracteristicas', 'llaves', 'cargador', 'otros', 'presupuesto', 'anticipo'];
 let draftTimer = 0;
 
 function saveDraftNow() {
@@ -219,7 +225,7 @@ form.addEventListener('input', () => { updatePreview(); saveDraft(); });
 form.addEventListener('change', () => { updatePreview(); saveDraft(); });
 $('#telefono').addEventListener('input', (e) => { e.target.value = digits(e.target.value).slice(0, 10); });
 $('#halfBtn').addEventListener('click', () => {
-  $('#anticipo').value = (Math.round(num($('#total').value) * 50) / 100).toFixed(2);
+  $('#anticipo').value = (Math.round(num($('#presupuesto').value) * 50) / 100).toFixed(2);
   updatePreview();
   saveDraft();
 });
@@ -246,21 +252,29 @@ $$('.nav-item[data-jump]').forEach((a) => a.addEventListener('click', () => { if
 
 // ================= Historial =================
 const STATUS = {
-  recibido: 'Recibido', reparacion: 'En reparación', listo: 'Listo para entrega', entregado: 'Entregado', pagado: 'Anticipo pagado'
+  recibido: 'Recibido', reparacion: 'En reparación', listo: 'Listo para entrega', entregado: 'Entregado',
+  pagado: 'Anticipo pagado', pagada: 'Pagada', completada: 'Concluido y entregado'
 };
 const statusKey = (s) => {
   const t = String(s || '').toLowerCase();
+  if (t.includes('complet')) return 'completada';
+  if (t.includes('anticipo')) return 'pagado';
+  if (t.includes('pagad')) return 'pagada';
   if (t.includes('repar')) return 'reparacion';
   if (t.includes('listo')) return 'listo';
   if (t.includes('entreg')) return 'entregado';
-  if (t.includes('pagad')) return 'pagado';
   return 'recibido';
 };
+const isClosed = (o) => statusKey(o.estatus) === 'completada';
 
 function svg(path) {
   return `<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${path}</svg>`;
 }
 const ICON_WA = svg('<path d="M4 20l1.3-3.9A8 8 0 1 1 8 19z"/><path d="M9 9.5c.5 2 2.3 4 4.5 4.6l1.2-1.2 2 .9c-.2 1.3-1.4 2-2.7 1.8C10.6 15 8 12.5 7.6 9.3c-.1-1.2.6-2.4 1.8-2.6l.9 2z"/>');
+const ICON_PAY = svg('<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18M7 15h3"/>');
+const ICON_DONE = svg('<path d="M5 12.5l4.2 4.2L19 7"/>');
+const ICON_RCPT = svg('<path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/>');
+const ICON_DEL = svg('<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/>');
 const ICON_SIG = svg('<path d="M3 17c3-2 4 2 6 0s3-4 5-2 2 3 4 1"/><path d="M3 21h18"/>');
 
 function renderHistory() {
@@ -271,7 +285,7 @@ function renderHistory() {
     const tr = document.createElement('tr');
     const key = statusKey(o.estatus);
     const msg = key === 'listo'
-      ? `Hola ${o.cliente}, tu ${o.marca} (orden ${o.folio}) ya está listo para recoger en Z e-Scooters México, Av. Patriotismo 176. Horario: L–V 10:00–19:00, S 10:00–15:00. Saldo pendiente: ${fmtMXN(o.saldo)}.`
+      ? `Hola ${o.cliente}, tu ${o.marca} (orden ${o.folio}) ya está listo para recoger en Z e-Scooters México, Av. Patriotismo 176. Horario: L–V 10:00–19:00, S 10:00–15:00. Total a pagar: ${fmtMXN(o.saldo)}.`
       : `Hola ${o.cliente}, te escribimos de Z e-Scooters México sobre tu orden ${o.folio} (${o.marca}).`;
     tr.innerHTML = `
       <td><div class="td-main mono"></div><div class="td-sub"></div></td>
@@ -297,6 +311,34 @@ function renderHistory() {
       a.setAttribute('aria-label', `WhatsApp a ${o.cliente}`);
       actions.append(a);
     }
+    if (!isClosed(o) && num(o.saldo) > 0) {
+      const b = Object.assign(document.createElement('button'), { type: 'button', className: 'icon-btn', title: 'Registrar pago' });
+      b.innerHTML = ICON_PAY;
+      b.setAttribute('aria-label', `Registrar pago de la orden ${o.folio}`);
+      b.addEventListener('click', () => openPayDialog(o));
+      actions.append(b);
+    }
+    if (!isClosed(o) && num(o.saldo) <= 0) {
+      const b = Object.assign(document.createElement('button'), { type: 'button', className: 'icon-btn is-go', title: 'Concluir y entregar' });
+      b.innerHTML = ICON_DONE;
+      b.setAttribute('aria-label', `Concluir y entregar la orden ${o.folio}`);
+      b.addEventListener('click', () => openDoneDialog(o));
+      actions.append(b);
+    }
+    if (isClosed(o)) {
+      const b = Object.assign(document.createElement('button'), { type: 'button', className: 'icon-btn', title: 'Comprobante de entrega' });
+      b.innerHTML = ICON_RCPT;
+      b.setAttribute('aria-label', `Comprobante de entrega de la orden ${o.folio}`);
+      b.addEventListener('click', () => openDoneDialog(o));
+      actions.append(b);
+    }
+    if (isAdmin) {
+      const b = Object.assign(document.createElement('button'), { type: 'button', className: 'icon-btn is-danger', title: 'Eliminar orden (administrador)' });
+      b.innerHTML = ICON_DEL;
+      b.setAttribute('aria-label', `Eliminar la orden ${o.folio}`);
+      b.addEventListener('click', () => openDeleteDialog(o));
+      actions.append(b);
+    }
     if (o.firmaUrl) {
       const a = Object.assign(document.createElement('a'), { className: 'icon-btn', href: o.firmaUrl, target: '_blank', rel: 'noopener', title: 'Ver firma' });
       a.innerHTML = ICON_SIG;
@@ -309,12 +351,214 @@ function renderHistory() {
   empty.hidden = rows.length > 0;
   if (!rows.length) empty.textContent = historyCache.length ? 'Ninguna orden coincide con la búsqueda.' : 'Aún no hay órdenes registradas. Captura la primera en Nueva orden.';
 
-  const open = historyCache.filter((o) => !['entregado'].includes(statusKey(o.estatus)));
+  const open = historyCache.filter((o) => !['entregado', 'completada'].includes(statusKey(o.estatus)));
   $('#stOrders').textContent = historyCache.length;
   $('#stOpen').textContent = open.length;
   $('#stAdv').textContent = fmtMXN(historyCache.reduce((a, o) => a + num(o.anticipo), 0));
   $('#stDue').textContent = fmtMXN(open.reduce((a, o) => a + num(o.saldo), 0));
 }
+
+// ----- Pagos posteriores y liberación -----
+let payOrder = null;
+const payDlg = $('#payDlg');
+
+function syncPayAmount() {
+  const due = num(payOrder?.saldo);
+  const plan = (payDlg.querySelector('input[name="pdPlan"]:checked') || {}).value;
+  const monto = $('#pdMonto');
+  if (plan !== 'Varios pagos') {
+    monto.value = due.toFixed(2);
+    monto.readOnly = true;
+  } else {
+    monto.readOnly = false;
+    if (num(monto.value) > due) monto.value = due.toFixed(2);
+  }
+  monto.max = due.toFixed(2);
+}
+
+function openPayDialog(o) {
+  payOrder = o;
+  const paid = Math.max(num(o.total) - num(o.saldo), 0);
+  $('#pdFolio').textContent = `${o.folio} · ${o.cliente}`;
+  $('#pdTotal').textContent = fmtMXN(o.total);
+  $('#pdPaid').textContent = fmtMXN(paid);
+  $('#pdDue').textContent = fmtMXN(o.saldo);
+  const plan = o.plan === 'Varios pagos' ? 'Varios pagos' : 'Anticipo y liquidación';
+  payDlg.querySelectorAll('input[name="pdPlan"]').forEach((r) => { r.checked = r.value === plan; });
+  $('#pdMonto').value = '';
+  $('#pdNota').value = '';
+  $('#pdMetodo').selectedIndex = 0;
+  syncPayAmount();
+  payDlg.hidden = false;
+  requestAnimationFrame(() => payDlg.classList.add('is-in'));
+  $('#pdMonto').focus();
+}
+
+function closePayDialog() {
+  payDlg.classList.remove('is-in');
+  payDlg.hidden = true;
+  payOrder = null;
+}
+
+payDlg.querySelectorAll('input[name="pdPlan"]').forEach((r) => r.addEventListener('change', syncPayAmount));
+$('#pdCancel').addEventListener('click', closePayDialog);
+payDlg.addEventListener('keydown', (e) => { if (e.key === 'Escape') closePayDialog(); });
+
+$('#payForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (!payOrder) return;
+  session = getSession();
+  if (!session) return promptLogin('Tu sesión venció. Vuelve a iniciar sesión.');
+  const monto = Math.round(num($('#pdMonto').value) * 100) / 100;
+  const due = num(payOrder.saldo);
+  if (!(monto > 0) || monto > due) return toast(`El monto debe ser mayor a cero y no superar ${fmtMXN(due)}.`, 'error');
+  const btn = $('#pdSubmit');
+  btn.disabled = true;
+  try {
+    const plan = (payDlg.querySelector('input[name="pdPlan"]:checked') || {}).value;
+    if (plan && plan !== (payOrder.plan || 'Anticipo y liquidación')) {
+      await setPaymentPlan(session.token, payOrder.folio, plan);
+      payOrder.plan = plan;
+    }
+    const res = await addPayment(session.token, {
+      folio: payOrder.folio, monto, metodo: $('#pdMetodo').value, nota: clean($('#pdNota').value)
+    });
+    Object.assign(payOrder, { saldo: res.saldo, abonos: res.abonos, estatus: res.estatus });
+    renderHistory();
+    const folio = payOrder.folio;
+    closePayDialog();
+    toast(res.saldo > 0
+      ? `Pago registrado en ${folio}. Por pagar: ${fmtMXN(res.saldo)}.`
+      : `${folio} quedó pagada. Usa el botón ✓ para concluir y entregar.`, 'ok');
+  } catch (err) {
+    toast(err.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// ----- Servicio concluido y entregado: comprobante digital -----
+const doneDlg = $('#doneDlg');
+let doneOrder = null;
+
+function deliveryMessage(o, url) {
+  const nombre = String(o.cliente || '').trim().split(/\s+/)[0] || 'cliente';
+  return `Estimado(a) ${nombre}:\n\n`
+    + `Le confirmamos que el servicio de su *${o.marca}* fue *concluido y entregado*.\n\n`
+    + `*Folio:* ${o.folio}\n`
+    + `*Costo del servicio:* ${fmtMXN(o.total)} · pagado en su totalidad\n`
+    + `*Entrega:* ${o.entregada || new Date().toLocaleDateString('es-MX')}\n\n`
+    + `Su comprobante digital de entrega está disponible aquí:\n${url}\n\n`
+    + `Gracias por confiar su vehículo a *Z e-Scooters México*. Quedamos a sus órdenes en este mismo número.`;
+}
+
+function showDelivered(o, url) {
+  $('#doneTitle').textContent = 'Servicio concluido y entregado';
+  $('#dnText').textContent = 'Envía al cliente el comprobante digital con el mismo folio de la orden.';
+  $('#dnConfirm').hidden = true;
+  const link = o.receiptUrl || url;
+  $('#dnPdf').href = link;
+  $('#dnPdf').hidden = !link;
+  const tel = digits(o.telefono);
+  $('#dnWa').hidden = tel.length !== 10;
+  if (tel.length === 10) $('#dnWa').href = waLink(tel, deliveryMessage(o, link));
+  $('#dnClose').textContent = 'Cerrar';
+}
+
+function openDoneDialog(o) {
+  doneOrder = o;
+  $('#dnFolio').textContent = `${o.folio} · ${o.cliente}`;
+  $('#dnTotal').textContent = fmtMXN(o.total);
+  $('#dnPaid').textContent = fmtMXN(o.total);
+  $('#doneTitle').textContent = 'Concluir y entregar';
+  $('#dnText').textContent = 'El servicio quedará como concluido y entregado, y se generará el comprobante digital con este folio.';
+  $('#dnConfirm').hidden = false;
+  $('#dnConfirm').disabled = false;
+  $('.cta-label', $('#dnConfirm')).textContent = isClosed(o) ? 'Obtener comprobante' : 'Confirmar entrega';
+  $('#dnWa').hidden = true;
+  $('#dnPdf').hidden = true;
+  $('#dnClose').textContent = 'Cancelar';
+  if (isClosed(o) && (o.receiptUrl || o.comprobanteUrl)) showDelivered(o, o.comprobanteUrl);
+  doneDlg.hidden = false;
+  requestAnimationFrame(() => doneDlg.classList.add('is-in'));
+}
+
+function closeDoneDialog() {
+  doneDlg.classList.remove('is-in');
+  doneDlg.hidden = true;
+  doneOrder = null;
+}
+$('#dnClose').addEventListener('click', closeDoneDialog);
+doneDlg.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDoneDialog(); });
+
+$('#dnConfirm').addEventListener('click', async () => {
+  if (!doneOrder) return;
+  session = getSession();
+  if (!session) return promptLogin('Tu sesión venció. Vuelve a iniciar sesión.');
+  const btn = $('#dnConfirm');
+  btn.disabled = true;
+  $('.cta-label', btn).textContent = 'Generando comprobante…';
+  try {
+    const res = await completeOrder(session.token, doneOrder.folio);
+    Object.assign(doneOrder, {
+      estatus: 'Completada', comprobanteUrl: res.comprobanteUrl, receiptUrl: res.receiptUrl || '',
+      entregada: res.entregada || doneOrder.entregada
+    });
+    renderHistory();
+    showDelivered(doneOrder, res.comprobanteUrl);
+  } catch (err) {
+    btn.disabled = false;
+    $('.cta-label', btn).textContent = 'Confirmar entrega';
+    toast(err.message, 'error');
+  }
+});
+
+// ----- Eliminar orden (solo administradores; el servidor vuelve a verificarlo) -----
+const delDlg = $('#delDlg');
+let delOrder = null;
+
+function openDeleteDialog(o) {
+  delOrder = o;
+  $('#delFolio').textContent = o.folio;
+  $('#delInfo').textContent = `${o.cliente} · ${o.marca} · costo ${fmtMXN(o.total)}`;
+  $('#delMotivo').value = '';
+  delDlg.hidden = false;
+  requestAnimationFrame(() => delDlg.classList.add('is-in'));
+  $('#delMotivo').focus();
+}
+
+function closeDeleteDialog() {
+  delDlg.classList.remove('is-in');
+  delDlg.hidden = true;
+  delOrder = null;
+}
+$('#delCancel').addEventListener('click', closeDeleteDialog);
+delDlg.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDeleteDialog(); });
+
+$('#delForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (!delOrder) return;
+  const motivo = clean($('#delMotivo').value);
+  if (motivo.length < 3) return toast('Escribe el motivo de la eliminación.', 'error');
+  session = getSession();
+  if (!session) return promptLogin('Tu sesión venció. Vuelve a iniciar sesión.');
+  const btn = $('#delSubmit');
+  btn.disabled = true;
+  try {
+    const res = await deleteOrder(session.token, delOrder.folio, motivo);
+    const folio = delOrder.folio;
+    historyCache = historyCache.filter((x) => x.folio !== folio);
+    try { localStorage.setItem(HISTORY_KEY, JSON.stringify({ at: Date.now(), orders: historyCache })); } catch (_) { /* noop */ }
+    if (Number.isFinite(res.monthCount)) paintMonth(res.monthCount);
+    renderHistory();
+    closeDeleteDialog();
+    toast(`${folio} eliminada y archivada en «Órdenes eliminadas».`, 'ok');
+  } catch (err) {
+    toast(err.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+});
 
 function paintMonth(count) {
   if (!Number.isFinite(count)) return;
@@ -343,6 +587,7 @@ async function loadHistory() {
   try {
     const res = await listOrders(session.token);
     historyCache = res.orders || [];
+    isAdmin = res.isAdmin === true;
     try { localStorage.setItem(HISTORY_KEY, JSON.stringify({ at: Date.now(), orders: historyCache })); } catch (_) { /* noop */ }
     paintMonth(res.monthCount);
     renderHistory();
@@ -619,6 +864,7 @@ form.addEventListener('submit', async (e) => {
     anticipo: v.anticipo,
     total: v.total,
     saldo: Math.max(v.total - v.anticipo, 0),
+    plan: v.plan,
     llaves: v.llaves,
     cargador: v.cargador,
     otros: v.otros,
@@ -667,7 +913,7 @@ function showSuccess(o, { offline = false } = {}) {
 
   if (!offline) {
     const msg = `Hola ${o.nombre}, Z e-Scooters México registró tu orden ${o.folio} para ${o.marca}. `
-      + `Servicio: ${o.servicio}. Anticipo: ${fmtMXN(o.anticipo)}; saldo pendiente: ${fmtMXN(o.saldo)}. `
+      + `Servicio: ${o.servicio}. Costo: ${fmtMXN(o.total)}; anticipo: ${fmtMXN(o.anticipo)}; total a pagar: ${fmtMXN(o.saldo)}. `
       + 'Te avisaremos por este medio cuando tu vehículo esté listo. Consultas: 55 6501 8583.';
     $('#okWa').href = waLink(o.telefono, msg);
   }
@@ -792,6 +1038,8 @@ function setNowDefaults() {
 
 function resetForm() {
   form.reset();
+  const planDefault = form.querySelector('input[name="plan"][value="Anticipo y liquidación"]');
+  if (planDefault) planDefault.checked = true;
   signature.clear();
   acepta.disabled = true;
   acepta.checked = false;

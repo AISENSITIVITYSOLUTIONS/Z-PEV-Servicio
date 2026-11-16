@@ -15,6 +15,8 @@ acento lima `#D9F84A`, vista previa tipo comprobante).
 - **Términos y condiciones** completos (cláusulas PRIMERA a DÉCIMA NOVENA); la casilla se habilita
   al leer hasta el final.
 - **Firma digital** en una placa 3D, exportada como PNG a Drive.
+- **Pagos y cierre**: costo del servicio − anticipo = total a pagar. Plan «Anticipo y liquidación» o «Varios pagos»;
+  cada pago queda en la hoja «Pagos». Con saldo cero la orden pasa a **Pagada**; el botón ✓ la concluye y entrega (**Completada**), genera el comprobante digital en PDF con el mismo folio y lo envía al cliente por WhatsApp.
 - **Historial**: últimas órdenes, búsqueda, totales (anticipos y saldo por cobrar), enlace a la firma
   y aviso al cliente por WhatsApp.
 - **Cobro del anticipo con Mercado Pago**: integrado y **oculto**; ver `docs/MERCADO_PAGO.md`.
@@ -26,7 +28,8 @@ acento lima `#D9F84A`, vista previa tipo comprobante).
 |---|---|---|
 | Frontend | Vite + JS + three.js → Firebase Hosting | Formulario, firma, historial |
 | Registro | Google Apps Script + Sheets + Drive | Folio `ZE-AAAAMMDD-NNNN`, filas, firmas |
-| Cobros | Firebase Function `billing` (Node 22) | Mercado Pago (Checkout Pro) y Aplazo (Online API), webhooks |
+| Cobros | Firebase Function `billing` (Node 22) | Mercado Pago (Checkout Pro), oculto |
+| Pago a plazos | Firebase Function `aplazo` (Node 22) | Aplazo (Online API) y su webhook |
 | Conciliación | Firebase Function `aplazoSweep` (cada 60 min) | Pagos de Aplazo sin webhook y links vencidos |
 
 ## 1. Google Sheets y Apps Script
@@ -42,7 +45,7 @@ acento lima `#D9F84A`, vista previa tipo comprobante).
    Copia la URL `/exec`.
 
 La hoja se crea sola con encabezados, formato de moneda y lista de estatus
-(Recibido, En reparación, Listo para entrega, Entregado, Anticipo pagado).
+(Recibido, En reparación, Listo para entrega, Entregado, Anticipo pagado, Pagada, Completada).
 El personal cambia el estatus directamente en la hoja; el historial lo refleja.
 
 ## 2. Inicio de sesión con Google

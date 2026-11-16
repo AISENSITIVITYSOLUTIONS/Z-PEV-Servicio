@@ -1,8 +1,8 @@
 # Pago a plazos con Aplazo
 
-Estado: **integrado y oculto**. La sección «¿No tienes tarjeta de crédito?» aparece en la
+Estado: **integrado y oculto**. Vive en su propia función `aplazo`, independiente de Mercado Pago. La sección «¿No tienes tarjeta de crédito?» aparece en la
 confirmación de la orden solo con `VITE_APLAZO_ENABLED=true` (frontend) y, en la función,
-`PAYMENTS_ENABLED=true` + `APLAZO_ENABLED=true`. Anticipos desde $100 MXN.
+`APLAZO_ENABLED=true`. Anticipos desde $100 MXN.
 
 ## Flujo
 
@@ -55,11 +55,11 @@ Secretos (patrón sin BOM de `docs/MERCADO_PAGO.md`):
 1. Pegar `apps-script/Code.gs` actualizado en el proyecto «Z-PEV Servicio API» y **actualizar la
    implementación** (Implementar → Gestionar implementaciones → Editar → Nueva versión), sin cambiar la URL.
 2. Guardar `APLAZO_API_TOKEN` y `APLAZO_WEBHOOK_TOKEN` en Secret Manager.
-3. `functions/.env`: `PAYMENTS_ENABLED=true`, `APLAZO_ENABLED=true`, `APLAZO_ENV=sandbox`, `APLAZO_MERCHANT_ID`.
+3. `functions/.env`: `APLAZO_ENABLED=true`, `APLAZO_ENV=sandbox`, `APLAZO_MERCHANT_ID`.
 4. Enviar a Aplazo: webhook `https://z-pev-servicio.web.app/billing/aplazo/webhook` y el token Bearer.
-5. `firebase deploy --only functions:billing,functions:aplazoSweep,hosting` (requiere plan Blaze y
-   Cloud Scheduler para `aplazoSweep`).
-6. `GET /billing/health` → `aplazo` con todo en `true`.
+5. `firebase deploy --only functions:aplazo,functions:aplazoSweep,hosting` (plan Blaze). No toca la
+   función `billing` de Mercado Pago ni necesita sus secretos.
+6. `GET https://z-pev-servicio.web.app/billing/aplazo/health` → todo en `true`.
 7. `.env` del frontend: `VITE_APLAZO_ENABLED=true`, `npm run build`, desplegar hosting.
 8. Probar con los teléfonos y la OTP de sandbox que entregó Aplazo.
 

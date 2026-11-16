@@ -8,9 +8,9 @@
     ],
     "rewrites": [
       {
-        "source": "/billing/**",
+        "source": "/billing/aplazo/**",
         "function": {
-          "functionId": "billing",
+          "functionId": "aplazo",
           "region": "us-central1"
         }
       },

@@ -269,7 +269,7 @@
             </header>
             <div class="grid grid-2">
               <div class="field span-2">
-                <label for="presupuesto">Costo de presupuesto aproximado</label>
+                <label for="presupuesto">Costo del servicio</label>
                 <div class="money">
                   <span class="money-sign">$</span>
                   <input id="presupuesto" name="presupuesto" class="input mono" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00" />
@@ -283,23 +283,29 @@
                   <input id="anticipo" name="anticipo" class="input mono" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00" />
                   <span class="money-tag">M.N.</span>
                 </div>
-                <button type="button" class="link-btn is-hidden" id="halfBtn">Usar 50 % del total</button>
+                <button type="button" class="link-btn is-hidden" id="halfBtn">Usar 50 % del costo</button>
               </div>
               <div class="field">
-                <label for="total">Total</label>
-                <div class="money">
+                <label for="saldo">Total a pagar <span class="hint-inline">costo − anticipo</span></label>
+                <div class="money is-readonly">
                   <span class="money-sign">$</span>
-                  <input id="total" name="total" class="input mono" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00" />
+                  <input id="saldo" name="saldo" class="input mono" type="text" readonly tabindex="-1" value="0.00" aria-live="polite" />
                   <span class="money-tag">M.N.</span>
                 </div>
               </div>
               <div class="field span-2">
-                <label for="saldo">Saldo pendiente</label>
-                <div class="money is-readonly">
-                  <span class="money-sign">$</span>
-                  <input id="saldo" name="saldo" class="input mono" type="text" readonly tabindex="-1" value="0.00" />
-                  <span class="money-tag">M.N.</span>
+                <span class="label" id="lbl-plan">Forma de pago</span>
+                <div class="segmented" role="radiogroup" aria-labelledby="lbl-plan">
+                  <label class="seg">
+                    <input type="radio" name="plan" value="Anticipo y liquidación" checked />
+                    <span>Anticipo y liquidación</span>
+                  </label>
+                  <label class="seg">
+                    <input type="radio" name="plan" value="Varios pagos" />
+                    <span>Varios pagos</span>
+                  </label>
                 </div>
+                <p class="hint" id="planHint">El saldo se liquida en un solo pago al entregar.</p>
               </div>
             </div>
           </section>
@@ -391,9 +397,9 @@
               <div class="rule"></div>
 
               <dl class="sums">
-                <div><dt>Presupuesto aprox.</dt><dd class="mono" id="pvPresup">$0.00</dd></div>
+                <div><dt>Costo del servicio</dt><dd class="mono" id="pvPresup">$0.00</dd></div>
                 <div><dt>Anticipo</dt><dd class="mono" id="pvAnticipo">$0.00</dd></div>
-                <div class="sum-total"><dt>Saldo pendiente</dt><dd class="mono" id="pvSaldo">$0.00</dd></div>
+                <div class="sum-total"><dt>Total a pagar</dt><dd class="mono" id="pvSaldo">$0.00</dd></div>
               </dl>
 
               <div class="sig-preview" id="pvSigBox">
@@ -454,7 +460,7 @@
           <div class="stat"><span class="k">Órdenes</span><span class="stat-v mono" id="stOrders">—</span></div>
           <div class="stat"><span class="k">En taller</span><span class="stat-v mono" id="stOpen">—</span></div>
           <div class="stat"><span class="k">Anticipos</span><span class="stat-v mono" id="stAdv">—</span></div>
-          <div class="stat"><span class="k">Saldo por cobrar</span><span class="stat-v mono" id="stDue">—</span></div>
+          <div class="stat"><span class="k">Por cobrar</span><span class="stat-v mono" id="stDue">—</span></div>
         </div>
 
         <div class="table-card">
@@ -464,8 +470,8 @@
                 <th scope="col">Folio</th>
                 <th scope="col">Cliente</th>
                 <th scope="col">Vehículo</th>
-                <th scope="col" class="num">Total</th>
-                <th scope="col" class="num">Saldo</th>
+                <th scope="col" class="num">Costo</th>
+                <th scope="col" class="num">Por pagar</th>
                 <th scope="col">Estatus</th>
                 <th scope="col"><span class="sr-only">Acciones</span></th>
               </tr>
@@ -514,6 +520,78 @@
       <a class="ghost wa-btn" id="okWa" target="_blank" rel="noopener">Enviar comprobante por WhatsApp</a>
       <button type="button" class="cta" id="newBtn"><span class="cta-label">Capturar otra orden</span></button>
     </div>
+  </div>
+
+  <!-- Registrar pago -->
+  <div class="overlay" id="payDlg" hidden>
+    <form class="success-card pay-card" id="payForm" role="dialog" aria-modal="true" aria-labelledby="payTitle" novalidate>
+      <h3 id="payTitle">Registrar pago</h3>
+      <p class="success-folio mono" id="pdFolio">ZE-</p>
+      <dl class="pd-sums">
+        <div><dt>Costo</dt><dd class="mono" id="pdTotal">$0.00</dd></div>
+        <div><dt>Pagado</dt><dd class="mono" id="pdPaid">$0.00</dd></div>
+        <div class="sum-total"><dt>Por pagar</dt><dd class="mono" id="pdDue">$0.00</dd></div>
+      </dl>
+      <div class="segmented" role="radiogroup" aria-label="Forma de pago">
+        <label class="seg"><input type="radio" name="pdPlan" value="Anticipo y liquidación" /><span>Liquidación</span></label>
+        <label class="seg"><input type="radio" name="pdPlan" value="Varios pagos" /><span>Varios pagos</span></label>
+      </div>
+      <div class="field">
+        <label for="pdMonto">Monto</label>
+        <div class="money">
+          <span class="money-sign">$</span>
+          <input id="pdMonto" class="input mono" type="number" min="0.01" step="0.01" inputmode="decimal" />
+          <span class="money-tag">M.N.</span>
+        </div>
+      </div>
+      <div class="field">
+        <label for="pdMetodo">Método</label>
+        <select id="pdMetodo" class="input">
+          <option>Efectivo</option><option>Tarjeta</option><option>Transferencia</option>
+          <option>Aplazo</option><option>Mercado Pago</option><option>Otro</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="pdNota">Nota <span class="hint-inline">opcional</span></label>
+        <input id="pdNota" class="input" type="text" maxlength="200" placeholder="Referencia, quién pagó…" />
+      </div>
+      <button type="submit" class="cta" id="pdSubmit"><span class="cta-label">Registrar pago</span></button>
+      <button type="button" class="ghost" id="pdCancel">Cancelar</button>
+    </form>
+  </div>
+
+  <!-- Servicio concluido y entregado -->
+  <div class="overlay" id="doneDlg" hidden>
+    <div class="success-card pay-card" role="dialog" aria-modal="true" aria-labelledby="doneTitle">
+      <h3 id="doneTitle">Concluir y entregar</h3>
+      <p class="success-folio mono" id="dnFolio">ZE-</p>
+      <dl class="pd-sums">
+        <div><dt>Costo</dt><dd class="mono" id="dnTotal">$0.00</dd></div>
+        <div><dt>Pagado</dt><dd class="mono" id="dnPaid">$0.00</dd></div>
+        <div class="sum-total"><dt>Saldo</dt><dd class="mono">$0.00</dd></div>
+      </dl>
+      <p class="success-text" id="dnText">El servicio quedará como concluido y entregado, y se generará el comprobante digital con este folio.</p>
+      <button type="button" class="cta" id="dnConfirm"><span class="cta-label">Confirmar entrega</span></button>
+      <a class="cta wa-cta" id="dnWa" target="_blank" rel="noopener" hidden><span class="cta-label">Enviar comprobante por WhatsApp</span></a>
+      <a class="ghost" id="dnPdf" target="_blank" rel="noopener" hidden>Ver comprobante del cliente</a>
+      <button type="button" class="ghost" id="dnClose">Cancelar</button>
+    </div>
+  </div>
+
+  <!-- Eliminar orden (solo administradores) -->
+  <div class="overlay" id="delDlg" hidden>
+    <form class="success-card pay-card" id="delForm" role="dialog" aria-modal="true" aria-labelledby="delTitle" novalidate>
+      <h3 id="delTitle">Eliminar orden</h3>
+      <p class="success-folio mono" id="delFolio">ZE-</p>
+      <p class="success-text" id="delInfo"></p>
+      <p class="success-text">La orden sale del historial y se archiva en la hoja «Órdenes eliminadas» con tu nombre, la fecha y el motivo. El folio no se vuelve a usar.</p>
+      <div class="field">
+        <label for="delMotivo">Motivo</label>
+        <input id="delMotivo" class="input" type="text" maxlength="300" placeholder="Ej.: orden de prueba, captura duplicada" />
+      </div>
+      <button type="submit" class="cta is-danger" id="delSubmit"><span class="cta-label">Eliminar orden</span></button>
+      <button type="button" class="ghost" id="delCancel">Cancelar</button>
+    </form>
   </div>
 
   <!-- Barra inferior (móvil) -->

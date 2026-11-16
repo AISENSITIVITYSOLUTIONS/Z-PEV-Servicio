@@ -2,7 +2,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const aplazo = require('../aplazo');
-const { handler } = require('../billing');
+const { handler } = aplazo;
 
 const SHEETS = 'https://sheets.test/exec';
 const FOLIO = 'ZE-20261109-0007';
@@ -140,11 +140,23 @@ test('sweep: no cancela un link reciente sin pagar', async () => {
 test('health no expone secretos de Aplazo', async () => {
   setEnv();
   const res = mockRes();
-  await handler(req('GET', '/billing/health'), res);
+  await handler(req('GET', '/billing/aplazo/health'), res);
   assert.strictEqual(res.code, 200);
   const s = JSON.stringify(res.body);
   assert.ok(!s.includes('api-tok') && !s.includes('wh-secreto'));
-  assert.strictEqual(res.body.aplazo.apiToken, true);
+  assert.strictEqual(res.body.apiToken, true);
+});
+
+test('errores de Aplazo se responden sin tirar la función', async () => {
+  setEnv();
+  delete process.env.APLAZO_API_TOKEN;
+  fakeWorld({ row: { cartId: `${FOLIO}-Aabcdef1`, monto: 500, estado: 'Pendiente' } });
+  const res = mockRes();
+  await handler(req('POST', '/billing/aplazo/webhook', {
+    get: (h) => (h.toLowerCase() === 'authorization' ? 'Bearer wh-secreto' : ''),
+    body: { cartId: `${FOLIO}-Aabcdef1`, merchantId: 4015 }
+  }), res);
+  assert.strictEqual(res.code, 503);
 });
 
 test('nombre del comprador se separa en nombre y apellido', () => {

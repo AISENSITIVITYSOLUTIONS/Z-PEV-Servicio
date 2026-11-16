@@ -1,7 +1,8 @@
 'use strict';
 // Cobro del anticipo a plazos con Aplazo (Online API).
 //
-// Rutas (bajo /billing, reescrito por Firebase Hosting):
+// Función propia «aplazo» (Firebase Hosting reescribe /billing/aplazo/** aquí):
+//   GET  /billing/aplazo/health    Estado de la configuración (sin secretos).
 //   POST /billing/aplazo/checkout  Personal → link de checkout de Aplazo para el anticipo de un folio.
 //   GET  /billing/aplazo/status    Personal → estado del pago (?folio=) y sincronización con la hoja.
 //   POST /billing/aplazo/cancel    Personal → cancela el link vigente no pagado de un folio.
@@ -33,7 +34,7 @@ function hosts() {
   };
 }
 
-const enabled = () => isTrue('PAYMENTS_ENABLED') && isTrue('APLAZO_ENABLED');
+const enabled = () => isTrue('APLAZO_ENABLED');
 
 function health() {
   return {
@@ -41,7 +42,8 @@ function health() {
     env: env('APLAZO_ENV', 'sandbox'),
     merchantId: Boolean(env('APLAZO_MERCHANT_ID')),
     apiToken: Boolean(env('APLAZO_API_TOKEN')),
-    webhookToken: Boolean(env('APLAZO_WEBHOOK_TOKEN'))
+    webhookToken: Boolean(env('APLAZO_WEBHOOK_TOKEN')),
+    sheets: Boolean(env('SHEETS_API_URL') && env('SHEETS_WEBHOOK_TOKEN'))
   };
 }
 
@@ -323,6 +325,7 @@ async function sweep() {
 /* ---------- Enrutador ---------- */
 
 async function route(req, res, path) {
+  if (req.method === 'GET' && path === '/health') return send(res, 200, health());
   if (!enabled()) return send(res, 403, { error: 'Los cobros con Aplazo no están activos.' });
   if (req.method === 'POST' && path === '/webhook') return webhook(req, res);
 
@@ -335,4 +338,14 @@ async function route(req, res, path) {
   return send(res, 404, { error: 'Ruta no encontrada.' });
 }
 
-module.exports = { route, sweep, health, _internal: { CART_RE, splitName, hosts, checkout, refund } };
+async function handler(req, res) {
+  const path = req.path.replace(/^\/billing\/aplazo/, '') || '/';
+  try {
+    return await route(req, res, path);
+  } catch (err) {
+    console.error('aplazo', path, err.message, err.aplazo || '');
+    return send(res, err.code && err.code < 600 ? err.code : 500, { error: err.message });
+  }
+}
+
+module.exports = { handler, route, sweep, health, _internal: { CART_RE, splitName, hosts, checkout, refund } };

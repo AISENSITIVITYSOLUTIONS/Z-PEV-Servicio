@@ -36,6 +36,25 @@ export function listOrders(idToken, limit = 60) {
   return postSheets({ action: 'list', idToken, limit });
 }
 
+/** Abono o liquidación de un folio. */
+export function addPayment(idToken, { folio, monto, metodo, nota }) {
+  return postSheets({ action: 'addPayment', idToken, folio, monto, metodo, nota });
+}
+
+export function setPaymentPlan(idToken, folio, plan) {
+  return postSheets({ action: 'setPlan', idToken, folio, plan });
+}
+
+/** Solo administradores: archiva la orden en «Órdenes eliminadas». */
+export function deleteOrder(idToken, folio, motivo) {
+  return postSheets({ action: 'deleteOrder', idToken, folio, motivo });
+}
+
+/** Libera la orden (Completada) cuando ya no tiene saldo. */
+export function completeOrder(idToken, folio) {
+  return postSheets({ action: 'complete', idToken, folio });
+}
+
 export async function createPaymentLink(idToken, { folio, amount, nombre, telefono, concepto }) {
   const res = await fetch(`${BILLING_URL}/checkout`, {
     method: 'POST',
