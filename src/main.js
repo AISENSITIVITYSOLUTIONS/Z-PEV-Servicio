@@ -23,6 +23,11 @@ let offlineUser = null;
 let lastOrder = null;
 let historyCache = [];
 let isAdmin = false;
+// Envío de la orden: un solo envío a la vez y el mismo ID de captura para todos los
+// intentos de la misma orden. Si el botón se toca dos veces, el servidor devuelve el
+// mismo folio en lugar de crear otra fila.
+let submitting = false;
+let captureId = null;
 
 const fmtMXN = (n) => Number(n || 0).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
 const num = (v) => {
@@ -162,12 +167,12 @@ function updatePreview() {
 
   $$('.checklist li').forEach((li) => li.classList.toggle('is-done', Boolean(checks[li.dataset.check])));
   const overpaid = v.anticipo > v.total && v.total > 0;
-  submitBtn.disabled = !ok || overpaid;
+  submitBtn.disabled = !ok || overpaid || submitting;
   submitLabel.textContent = overpaid ? 'El anticipo supera el costo' : ok ? 'Enviar orden y guardar' : 'Completa la orden para enviar';
 
   const done = Object.values(checks).filter(Boolean).length;
   const dockCta = $('#dockCta');
-  dockCta.disabled = !ok || overpaid;
+  dockCta.disabled = !ok || overpaid || submitting;
   dockCta.classList.toggle('is-ready', ok && !overpaid);
   $('#dockProgress').textContent = `${done}/6`;
   $('#dockLabel').textContent = overpaid ? 'Anticipo mayor al costo' : ok ? 'Enviar orden' : 'Completa la orden';
@@ -828,6 +833,7 @@ const MISSING = {
 };
 
 async function saveOffline(order, reason) {
+  captureId = null;
   await enqueue(order);
   requestPersistence();
   clearDraft();
@@ -839,6 +845,7 @@ async function saveOffline(order, reason) {
 
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
+  if (submitting) return;
   const v = values();
   const { ok, checks } = validate(v);
   if (!ok) {
@@ -847,8 +854,9 @@ form.addEventListener('submit', async (e) => {
   }
   if (!API_URL) return toast('Configura VITE_API_URL con la URL de la Web App de Apps Script.', 'error');
 
+  if (!captureId) captureId = newClientId();
   const order = {
-    clientId: newClientId(),
+    clientId: captureId,
     termsVersion: TERMS_VERSION,
     capturadoEn: new Date().toISOString(),
     fecha: v.fecha,
@@ -876,12 +884,15 @@ form.addEventListener('submit', async (e) => {
     return saveOffline(order, !navigator.onLine ? '' : 'Tu sesión venció: la orden quedó guardada en el teléfono. Inicia sesión para enviarla.');
   }
 
+  submitting = true;
   submitBtn.disabled = true;
+  $('#dockCta').disabled = true;
   submitBtn.classList.add('is-loading');
   submitLabel.textContent = 'Guardando orden…';
   try {
     const res = await createOrder(session.token, order);
     lastOrder = { ...order, folio: res.folio };
+    captureId = null;
     clearDraft();
     showSuccess(lastOrder);
     if (Number.isFinite(res.monthCount)) paintMonth(res.monthCount);
@@ -896,6 +907,7 @@ form.addEventListener('submit', async (e) => {
       submitLabel.textContent = 'Enviar orden y guardar';
     }
   } finally {
+    submitting = false;
     submitBtn.classList.remove('is-loading');
     updatePreview();
   }
@@ -1037,6 +1049,7 @@ function setNowDefaults() {
 }
 
 function resetForm() {
+  captureId = null;
   form.reset();
   const planDefault = form.querySelector('input[name="plan"][value="Anticipo y liquidación"]');
   if (planDefault) planDefault.checked = true;
