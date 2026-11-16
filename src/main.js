@@ -4,8 +4,9 @@ import { mountHero } from './hero3d.js';
 import { mountSignature } from './signature.js';
 import { initAuth, getSession, getKnownUser, signOut, renderGoogleButton } from './auth.js';
 import { enqueue, listPending, removePending, updatePending, newClientId, requestPersistence, isNetworkError, isAuthError } from './queue.js';
-import { API_URL, PAYMENTS_ENABLED, APLAZO_ENABLED, createOrder, listOrders, addPayment, setPaymentPlan, completeOrder, deleteOrder, createPaymentLink, createAplazoLink, cancelAplazoLink } from './api.js';
+import { API_URL, PAYMENTS_ENABLED, APLAZO_ENABLED, createOrder, listOrders, addPayment, setPaymentPlan, completeOrder, deleteOrder, getOrder, createPaymentLink, createAplazoLink, cancelAplazoLink } from './api.js';
 import { initPWA } from './pwa.js';
+import { printOrder } from './print.js';
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 const DRAFT_KEY = 'zpev-borrador';
@@ -280,6 +281,7 @@ const ICON_PAY = svg('<rect x="3" y="6" width="18" height="12" rx="2"/><path d="
 const ICON_DONE = svg('<path d="M5 12.5l4.2 4.2L19 7"/>');
 const ICON_RCPT = svg('<path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/>');
 const ICON_DEL = svg('<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/>');
+const ICON_PRINT = svg('<path d="M7 9V3h10v6"/><rect x="3" y="9" width="18" height="8" rx="2"/><path d="M7 14h10v7H7z"/>');
 const ICON_SIG = svg('<path d="M3 17c3-2 4 2 6 0s3-4 5-2 2 3 4 1"/><path d="M3 21h18"/>');
 
 function renderHistory() {
@@ -344,6 +346,13 @@ function renderHistory() {
       b.addEventListener('click', () => openDeleteDialog(o));
       actions.append(b);
     }
+    {
+      const b = Object.assign(document.createElement('button'), { type: 'button', className: 'icon-btn', title: 'Versión imprimible (solo si el cliente la pide)' });
+      b.innerHTML = ICON_PRINT;
+      b.setAttribute('aria-label', `Versión imprimible de la orden ${o.folio}`);
+      b.addEventListener('click', () => printFromHistory(o, b));
+      actions.append(b);
+    }
     if (o.firmaUrl) {
       const a = Object.assign(document.createElement('a'), { className: 'icon-btn', href: o.firmaUrl, target: '_blank', rel: 'noopener', title: 'Ver firma' });
       a.innerHTML = ICON_SIG;
@@ -361,6 +370,23 @@ function renderHistory() {
   $('#stOpen').textContent = open.length;
   $('#stAdv').textContent = fmtMXN(historyCache.reduce((a, o) => a + num(o.anticipo), 0));
   $('#stDue').textContent = fmtMXN(open.reduce((a, o) => a + num(o.saldo), 0));
+}
+
+// ----- Versión imprimible (excepción: clientes sin WhatsApp) -----
+async function printFromHistory(o, btn) {
+  session = getSession();
+  if (!session) return promptLogin('Tu sesión venció. Vuelve a iniciar sesión.');
+  btn.disabled = true;
+  btn.classList.add('is-busy');
+  try {
+    const { order } = await getOrder(session.token, o.folio);
+    await printOrder(order);
+  } catch (err) {
+    toast(`No se pudo preparar la versión imprimible: ${err.message}`, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.classList.remove('is-busy');
+  }
 }
 
 // ----- Pagos posteriores y liberación -----
@@ -464,6 +490,9 @@ function showDelivered(o, url) {
   const link = o.receiptUrl || url;
   $('#dnPdf').href = link;
   $('#dnPdf').hidden = !link;
+  const printable = o.receiptUrl ? `${o.receiptUrl}&print=1` : o.comprobanteUrl;
+  $('#dnPrint').hidden = !printable;
+  if (printable) $('#dnPrint').href = printable;
   const tel = digits(o.telefono);
   $('#dnWa').hidden = tel.length !== 10;
   if (tel.length === 10) $('#dnWa').href = waLink(tel, deliveryMessage(o, link));
@@ -482,6 +511,7 @@ function openDoneDialog(o) {
   $('.cta-label', $('#dnConfirm')).textContent = isClosed(o) ? 'Obtener comprobante' : 'Confirmar entrega';
   $('#dnWa').hidden = true;
   $('#dnPdf').hidden = true;
+  $('#dnPrint').hidden = true;
   $('#dnClose').textContent = 'Cancelar';
   if (isClosed(o) && (o.receiptUrl || o.comprobanteUrl)) showDelivered(o, o.comprobanteUrl);
   doneDlg.hidden = false;
@@ -915,7 +945,9 @@ form.addEventListener('submit', async (e) => {
 
 // ================= Confirmación =================
 const overlay = $('#success');
+let shownOrder = null;
 function showSuccess(o, { offline = false } = {}) {
+  shownOrder = o;
   $('#okTitle').textContent = offline ? 'Orden guardada en el teléfono' : 'Orden registrada';
   $('#okFolio').textContent = offline ? 'Folio pendiente' : o.folio;
   $('#okOffline').hidden = !offline;
@@ -1034,6 +1066,10 @@ $('#bnplCancel').addEventListener('click', async () => {
   } catch (err) {
     toast(err.message, 'error');
   }
+});
+
+$('#okPrint').addEventListener('click', () => {
+  if (shownOrder) printOrder({ ...shownOrder, firmaSrc: shownOrder.firmaPng });
 });
 
 $('#newBtn').addEventListener('click', () => {

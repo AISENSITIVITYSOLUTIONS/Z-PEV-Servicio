@@ -212,3 +212,22 @@ body {
   .ticket, .seal { animation: none; transition: none; }
   .ticket.is-loading .folio, .ticket.is-loading .facts dd, .ticket.is-loading .totals dd { animation: none; }
 }
+
+/* ---------- Versión imprimible (solo a petición del cliente) ---------- */
+@media print {
+  @page { size: letter; margin: 12mm; }
+  :root { color-scheme: light; }
+  body { background: #FFFFFF !important; }
+  .stage { padding: 0 !important; min-height: 0 !important; display: block !important; }
+  .maker { color: #111; margin-bottom: 10px; width: 100%; }
+  .maker img { box-shadow: none; padding: 0; }
+  .maker span { color: #555; }
+  .ticket {
+    width: 100% !important; max-width: none !important; transform: none !important; animation: none !important;
+    box-shadow: none !important; border: 1px solid #BBB; border-radius: 8px;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  .sheen, .actions { display: none !important; }
+  .seal { animation: none !important; }
+  .block, .head, .folio-row { break-inside: avoid; }
+}

@@ -43,6 +43,11 @@ function render(d) {
     $('#pdf').hidden = false;
   }
   ticket.classList.remove('is-loading');
+  // ?print=1: versión imprimible a petición del cliente (sin WhatsApp).
+  if (new URLSearchParams(location.search).get('print') === '1') {
+    const imgs = [...document.images].map((img) => (img.complete ? null : new Promise((r) => { img.onload = r; img.onerror = r; })));
+    Promise.all([document.fonts?.ready, ...imgs]).then(() => setTimeout(() => window.print(), 300));
+  }
 }
 
 async function load() {

@@ -85,3 +85,8 @@ export function createAplazoLink(idToken, { folio, amount, nombre, telefono, con
 export function cancelAplazoLink(idToken, folio) {
   return billing('/aplazo/cancel', idToken, { body: { folio } });
 }
+
+/** Orden completa (con la firma) para la versión imprimible. */
+export function getOrder(idToken, folio) {
+  return postSheets({ action: 'getOrder', idToken, folio });
+}

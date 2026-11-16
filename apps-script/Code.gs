@@ -93,6 +93,7 @@ function doPost(e) {
 
     const sheet = getSheet_(props.getProperty('SHEET_ID'));
     if (action === 'list') return json_(Object.assign(listOrders_(sheet, data.limit), { isAdmin: isAdmin_(email, props) }));
+    if (action === 'getOrder') return json_(getOrder_(sheet, data.folio));
     if (action === 'deleteOrder') {
       if (!isAdmin_(email, props)) return json_({ ok: false, error: 'Solo un administrador puede eliminar órdenes.' });
       lock.waitLock(20000);
@@ -218,6 +219,50 @@ function orderRow_(sheet, folio) {
   const folios = sheet.getRange(2, 1, last - 1, 1).getValues();
   for (let i = folios.length - 1; i >= 0; i--) if (folios[i][0] === folio) return i + 2;
   return 0;
+}
+
+/* Orden completa para la versión imprimible (excepción para clientes sin WhatsApp). */
+function getOrder_(sheet, folio) {
+  const r = orderRow_(sheet, folio);
+  if (!r) return { ok: false, error: 'No se encontró la orden ' + folio + '.' };
+  const v = sheet.getRange(r, 1, 1, HEADERS.length).getValues()[0];
+  const hora = v[COL['Hora']];
+  return {
+    ok: true,
+    order: {
+      folio: v[COL['Folio']],
+      fecha: fmtDate_(v[COL['Fecha de orden']]),
+      hora: hora instanceof Date ? Utilities.formatDate(hora, TZ, 'HH:mm') : String(hora || ''),
+      nombre: v[COL['Cliente']],
+      telefono: String(v[COL['Teléfono']]).replace(/^'/, ''),
+      marca: v[COL['Marca y modelo']],
+      serie: v[COL['N° de serie']],
+      servicio: v[COL['Descripción del servicio']],
+      caracteristicas: v[COL['Características generales']],
+      encendido: v[COL['Encendido']],
+      anticipo: num_(v[COL['Anticipo (MXN)']]),
+      total: num_(v[COL['Total (MXN)']]),
+      saldo: num_(v[COL['Saldo pendiente (MXN)']]),
+      llaves: v[COL['Llaves o NFC']],
+      cargador: v[COL['Cargador']],
+      otros: v[COL['Otros accesorios']],
+      termsVersion: v[COL['Versión de términos']],
+      plan: v[COL['Plan de pago']] || PLANS[0],
+      estatus: v[COL['Estatus']],
+      firmaSrc: signatureData_(v[COL['Firma (enlace)']])
+    }
+  };
+}
+
+function signatureData_(url) {
+  const m = String(url || '').match(/\/d\/([\w-]{10,})/) || String(url || '').match(/[?&]id=([\w-]{10,})/);
+  if (!m) return '';
+  try {
+    const blob = DriveApp.getFileById(m[1]).getBlob();
+    return 'data:' + blob.getContentType() + ';base64,' + Utilities.base64Encode(blob.getBytes());
+  } catch (err) {
+    return '';
+  }
 }
 
 function paymentsSheet_(sheet) {

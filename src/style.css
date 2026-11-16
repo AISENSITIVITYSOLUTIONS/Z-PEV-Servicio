@@ -797,3 +797,47 @@ button.icon-btn { cursor: pointer; font: inherit; }
 .cta.is-danger { background: #B42318; color: #FFFFFF; }
 #delDlg .success-text { text-align: left; margin: 0; }
 .cta.is-danger .cta-label { color: #FFFFFF; }
+
+/* ---------- Versión imprimible (excepción: clientes sin WhatsApp) ---------- */
+.print-btn { align-self: center; justify-self: center; display: inline-flex; gap: 6px; font-size: 12px; color: var(--muted); }
+.icon-btn.is-busy { opacity: .45; cursor: progress; }
+#printArea { display: none; }
+
+@media print {
+  @page { size: letter; margin: 14mm 14mm 16mm; }
+  body.is-printing { background: #FFFFFF !important; }
+  body.is-printing > *:not(#printArea) { display: none !important; }
+  body.is-printing #printArea { display: block; }
+}
+.pr-sheet {
+  font-family: var(--font); color: #111; font-size: 10.5pt; line-height: 1.4;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+.pr-head {
+  display: grid; grid-template-columns: auto 1fr auto; gap: 14px; align-items: center;
+  padding-bottom: 10px; border-bottom: 2px solid #111;
+}
+.pr-logo { width: 46px; height: 46px; object-fit: contain; }
+.pr-id { display: grid; gap: 1px; font-size: 8.5pt; color: #444; }
+.pr-id strong { font-size: 11pt; color: #111; }
+.pr-folio { text-align: right; display: grid; }
+.pr-folio span { font-size: 8pt; text-transform: uppercase; letter-spacing: .08em; color: #555; }
+.pr-folio strong { font-family: var(--mono); font-size: 13pt; }
+.pr-grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 10px; margin-top: 12px; }
+.pr-box { border: 1px solid #BBB; border-radius: 6px; padding: 8px 10px; margin: 0; break-inside: avoid; }
+.pr-sheet > .pr-box { margin-top: 10px; }
+.pr-cap { font-size: 7.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: #555; margin: 0 0 4px; }
+.pr-box dl, .pr-box div { margin: 0; }
+.pr-box > div { display: grid; grid-template-columns: 7.5em 1fr; gap: 6px; padding: 2px 0; border-top: 1px dotted #DDD; }
+.pr-box > div:first-of-type { border-top: 0; }
+.pr-box dt { color: #555; }
+.pr-box dd { margin: 0; font-weight: 600; }
+.pr-text { margin: 0 0 6px; white-space: pre-wrap; }
+.pr-sign { display: grid; grid-template-columns: 1fr 1.2fr; gap: 14px; align-items: end; margin-top: 12px; break-inside: avoid; }
+.pr-sign-box { display: grid; justify-items: center; border-bottom: 1px solid #111; padding-bottom: 4px; }
+.pr-sign-box img { max-height: 70px; max-width: 100%; }
+.pr-sign-box span { font-size: 8pt; color: #444; margin-top: 2px; }
+.pr-small { font-size: 8pt; color: #555; margin: 0; }
+.pr-terms { margin-top: 14px; padding-top: 8px; border-top: 1px solid #BBB; font-size: 7.5pt; line-height: 1.35; color: #222; columns: 2; column-gap: 16px; }
+.pr-terms h2 { font-size: 9pt; margin: 0 0 4px; column-span: all; }
+.pr-terms p { margin: 0 0 4px; break-inside: avoid-column; }
