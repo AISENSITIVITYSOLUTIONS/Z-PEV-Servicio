@@ -9,6 +9,8 @@
  *               el comprobante digital de entrega (PDF en Drive, mismo folio). Si ya estaba
  *               completada, devuelve el comprobante existente para reenviarlo.
  *   setPlan     Cambia el plan de pago: «Anticipo y liquidación» o «Varios pagos».
+ *   deleteOrder Solo administradores (ADMIN_EMAILS): mueve la orden a la hoja «Órdenes eliminadas»
+ *               con quién, cuándo y motivo, y la quita de «Órdenes». El folio no se reutiliza.
  *   payment  Uso interno de la función de cobros (Firebase): marca el pago del anticipo.
  *
  * GET ?action=receipt&f=<folio>&t=<token>  Comprobante público de entrega (solo lectura). El token es
@@ -27,6 +29,8 @@
  *   SHEET_ID              ID de la hoja de cálculo (entre /d/ y /edit en la URL).
  *   DRIVE_FOLDER_ID       ID de la carpeta de Drive para las firmas.
  *   SHEETS_WEBHOOK_TOKEN  Solo si se activan cobros: cadena larga aleatoria, igual a la de Firebase.
+ *   ADMIN_EMAILS          Administradores (pueden eliminar órdenes), separados por coma. Si no existe,
+ *                         se usan DEFAULT_ADMINS.
  */
 
 const SHEET_NAME = 'Órdenes';
@@ -44,6 +48,8 @@ const HEADERS = [
   'Aplazo actualizado', 'Aplazo reembolsado', 'Aplazo generado por',
   'Plan de pago', 'Abonos (MXN)', 'Liberada por', 'Liberada el', 'Comprobante de entrega'
 ];
+const DELETED_SHEET = 'Órdenes eliminadas';
+const DEFAULT_ADMINS = ['fdealbam@nni.ai', 'fdealbam@gmail.com', 'estebans690@gmail.com'];
 const PAYMENTS_SHEET = 'Pagos';
 const PAYMENT_HEADERS = ['Folio', 'Fecha', 'Tipo', 'Monto (MXN)', 'Método', 'Nota', 'Registrado por', 'Saldo después (MXN)'];
 const PAYMENT_METHODS = ['Efectivo', 'Tarjeta', 'Transferencia', 'Aplazo', 'Mercado Pago', 'Otro'];
@@ -86,7 +92,12 @@ function doPost(e) {
     }
 
     const sheet = getSheet_(props.getProperty('SHEET_ID'));
-    if (action === 'list') return json_(listOrders_(sheet, data.limit));
+    if (action === 'list') return json_(Object.assign(listOrders_(sheet, data.limit), { isAdmin: isAdmin_(email, props) }));
+    if (action === 'deleteOrder') {
+      if (!isAdmin_(email, props)) return json_({ ok: false, error: 'Solo un administrador puede eliminar órdenes.' });
+      lock.waitLock(20000);
+      return json_(deleteOrder_(sheet, data, email));
+    }
     if (action === 'addPayment' || action === 'complete' || action === 'setPlan') {
       lock.waitLock(20000);
       if (action === 'addPayment') return json_(addPayment_(sheet, data, email));
@@ -583,6 +594,40 @@ function aplazoPending_(sheet) {
   return rows;
 }
 
+/* ---------- Eliminar orden (solo administradores) ---------- */
+
+function isAdmin_(email, props) {
+  const raw = props.getProperty('ADMIN_EMAILS');
+  const list = raw ? raw.split(/[,;\s]+/) : DEFAULT_ADMINS;
+  return list.map(function (x) { return x.trim().toLowerCase(); }).indexOf(String(email || '').toLowerCase()) >= 0;
+}
+
+function deletedSheet_(sheet) {
+  const ss = sheet.getParent();
+  let d = ss.getSheetByName(DELETED_SHEET);
+  if (!d) {
+    d = ss.insertSheet(DELETED_SHEET);
+    const head = HEADERS.concat(['Eliminada por', 'Eliminada el', 'Motivo de eliminación']);
+    d.appendRow(head);
+    d.setFrozenRows(1);
+    d.getRange(1, 1, 1, head.length).setFontWeight('bold').setBackground('#5A1A1E').setFontColor('#FFFFFF');
+  }
+  return d;
+}
+
+/** Archiva la fila en «Órdenes eliminadas» y la quita de «Órdenes». */
+function deleteOrder_(sheet, data, email) {
+  const r = orderRow_(sheet, data.folio);
+  if (!r) return { ok: false, error: 'Folio no encontrado.' };
+  const motivo = clip_(String(data.motivo || '').trim(), 300);
+  if (motivo.length < 3) return { ok: false, error: 'Indica el motivo de la eliminación.' };
+  const row = sheet.getRange(r, 1, 1, HEADERS.length).getValues()[0];
+  deletedSheet_(sheet).appendRow(row.concat([email, new Date(), motivo]));
+  sheet.deleteRow(r);
+  SpreadsheetApp.flush();
+  return { ok: true, folio: data.folio, monthCount: monthCount_(sheet) };
+}
+
 /* ---------- Acceso ---------- */
 
 function verifyUser_(idToken, props) {
@@ -686,14 +731,17 @@ function getSheet_(sheetId) {
 function nextFolio_(sheet) {
   const today = Utilities.formatDate(new Date(), TZ, 'yyyyMMdd');
   const prefix = 'ZE-' + today + '-';
-  const last = sheet.getLastRow();
   let seq = 0;
-  if (last >= 2) {
-    sheet.getRange(2, 1, last - 1, 1).getValues().forEach(function (r) {
+  // También revisa las órdenes eliminadas: un folio nunca se reutiliza.
+  [sheet, sheet.getParent().getSheetByName(DELETED_SHEET)].forEach(function (sh) {
+    if (!sh) return;
+    const last = sh.getLastRow();
+    if (last < 2) return;
+    sh.getRange(2, 1, last - 1, 1).getValues().forEach(function (r) {
       const f = String(r[0]);
       if (f.indexOf(prefix) === 0) seq = Math.max(seq, parseInt(f.slice(prefix.length), 10) || 0);
     });
-  }
+  });
   return prefix + ('000' + (seq + 1)).slice(-4);
 }
 

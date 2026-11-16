@@ -790,3 +790,10 @@ button.icon-btn { cursor: pointer; font: inherit; }
 /* ---------- Servicio concluido y entregado ---------- */
 .wa-cta { display: flex; align-items: center; justify-content: center; text-decoration: none; }
 #doneDlg .success-text { text-align: left; margin: 0; }
+
+/* ---------- Eliminar orden ---------- */
+.icon-btn.is-danger { color: #B42318; }
+.icon-btn.is-danger:hover { border-color: #F2C4BE; background: #FDF0EE; color: #8F1B12; }
+.cta.is-danger { background: #B42318; color: #FFFFFF; }
+#delDlg .success-text { text-align: left; margin: 0; }
+.cta.is-danger .cta-label { color: #FFFFFF; }

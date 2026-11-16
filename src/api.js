@@ -45,6 +45,11 @@ export function setPaymentPlan(idToken, folio, plan) {
   return postSheets({ action: 'setPlan', idToken, folio, plan });
 }
 
+/** Solo administradores: archiva la orden en «Órdenes eliminadas». */
+export function deleteOrder(idToken, folio, motivo) {
+  return postSheets({ action: 'deleteOrder', idToken, folio, motivo });
+}
+
 /** Libera la orden (Completada) cuando ya no tiene saldo. */
 export function completeOrder(idToken, folio) {
   return postSheets({ action: 'complete', idToken, folio });

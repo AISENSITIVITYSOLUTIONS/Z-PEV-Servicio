@@ -4,7 +4,7 @@ import { mountHero } from './hero3d.js';
 import { mountSignature } from './signature.js';
 import { initAuth, getSession, getKnownUser, signOut, renderGoogleButton } from './auth.js';
 import { enqueue, listPending, removePending, updatePending, newClientId, requestPersistence, isNetworkError, isAuthError } from './queue.js';
-import { API_URL, PAYMENTS_ENABLED, APLAZO_ENABLED, createOrder, listOrders, addPayment, setPaymentPlan, completeOrder, createPaymentLink, createAplazoLink, cancelAplazoLink } from './api.js';
+import { API_URL, PAYMENTS_ENABLED, APLAZO_ENABLED, createOrder, listOrders, addPayment, setPaymentPlan, completeOrder, deleteOrder, createPaymentLink, createAplazoLink, cancelAplazoLink } from './api.js';
 import { initPWA } from './pwa.js';
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
@@ -22,6 +22,7 @@ let session = null;
 let offlineUser = null;
 let lastOrder = null;
 let historyCache = [];
+let isAdmin = false;
 
 const fmtMXN = (n) => Number(n || 0).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
 const num = (v) => {
@@ -273,6 +274,7 @@ const ICON_WA = svg('<path d="M4 20l1.3-3.9A8 8 0 1 1 8 19z"/><path d="M9 9.5c.5
 const ICON_PAY = svg('<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18M7 15h3"/>');
 const ICON_DONE = svg('<path d="M5 12.5l4.2 4.2L19 7"/>');
 const ICON_RCPT = svg('<path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/>');
+const ICON_DEL = svg('<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/>');
 const ICON_SIG = svg('<path d="M3 17c3-2 4 2 6 0s3-4 5-2 2 3 4 1"/><path d="M3 21h18"/>');
 
 function renderHistory() {
@@ -328,6 +330,13 @@ function renderHistory() {
       b.innerHTML = ICON_RCPT;
       b.setAttribute('aria-label', `Comprobante de entrega de la orden ${o.folio}`);
       b.addEventListener('click', () => openDoneDialog(o));
+      actions.append(b);
+    }
+    if (isAdmin) {
+      const b = Object.assign(document.createElement('button'), { type: 'button', className: 'icon-btn is-danger', title: 'Eliminar orden (administrador)' });
+      b.innerHTML = ICON_DEL;
+      b.setAttribute('aria-label', `Eliminar la orden ${o.folio}`);
+      b.addEventListener('click', () => openDeleteDialog(o));
       actions.append(b);
     }
     if (o.firmaUrl) {
@@ -504,6 +513,53 @@ $('#dnConfirm').addEventListener('click', async () => {
   }
 });
 
+// ----- Eliminar orden (solo administradores; el servidor vuelve a verificarlo) -----
+const delDlg = $('#delDlg');
+let delOrder = null;
+
+function openDeleteDialog(o) {
+  delOrder = o;
+  $('#delFolio').textContent = o.folio;
+  $('#delInfo').textContent = `${o.cliente} · ${o.marca} · costo ${fmtMXN(o.total)}`;
+  $('#delMotivo').value = '';
+  delDlg.hidden = false;
+  requestAnimationFrame(() => delDlg.classList.add('is-in'));
+  $('#delMotivo').focus();
+}
+
+function closeDeleteDialog() {
+  delDlg.classList.remove('is-in');
+  delDlg.hidden = true;
+  delOrder = null;
+}
+$('#delCancel').addEventListener('click', closeDeleteDialog);
+delDlg.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDeleteDialog(); });
+
+$('#delForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (!delOrder) return;
+  const motivo = clean($('#delMotivo').value);
+  if (motivo.length < 3) return toast('Escribe el motivo de la eliminación.', 'error');
+  session = getSession();
+  if (!session) return promptLogin('Tu sesión venció. Vuelve a iniciar sesión.');
+  const btn = $('#delSubmit');
+  btn.disabled = true;
+  try {
+    const res = await deleteOrder(session.token, delOrder.folio, motivo);
+    const folio = delOrder.folio;
+    historyCache = historyCache.filter((x) => x.folio !== folio);
+    try { localStorage.setItem(HISTORY_KEY, JSON.stringify({ at: Date.now(), orders: historyCache })); } catch (_) { /* noop */ }
+    if (Number.isFinite(res.monthCount)) paintMonth(res.monthCount);
+    renderHistory();
+    closeDeleteDialog();
+    toast(`${folio} eliminada y archivada en «Órdenes eliminadas».`, 'ok');
+  } catch (err) {
+    toast(err.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+});
+
 function paintMonth(count) {
   if (!Number.isFinite(count)) return;
   $('#monthCount').textContent = `${count}`;
@@ -531,6 +587,7 @@ async function loadHistory() {
   try {
     const res = await listOrders(session.token);
     historyCache = res.orders || [];
+    isAdmin = res.isAdmin === true;
     try { localStorage.setItem(HISTORY_KEY, JSON.stringify({ at: Date.now(), orders: historyCache })); } catch (_) { /* noop */ }
     paintMonth(res.monthCount);
     renderHistory();

@@ -578,6 +578,22 @@
     </div>
   </div>
 
+  <!-- Eliminar orden (solo administradores) -->
+  <div class="overlay" id="delDlg" hidden>
+    <form class="success-card pay-card" id="delForm" role="dialog" aria-modal="true" aria-labelledby="delTitle" novalidate>
+      <h3 id="delTitle">Eliminar orden</h3>
+      <p class="success-folio mono" id="delFolio">ZE-</p>
+      <p class="success-text" id="delInfo"></p>
+      <p class="success-text">La orden sale del historial y se archiva en la hoja «Órdenes eliminadas» con tu nombre, la fecha y el motivo. El folio no se vuelve a usar.</p>
+      <div class="field">
+        <label for="delMotivo">Motivo</label>
+        <input id="delMotivo" class="input" type="text" maxlength="300" placeholder="Ej.: orden de prueba, captura duplicada" />
+      </div>
+      <button type="submit" class="cta is-danger" id="delSubmit"><span class="cta-label">Eliminar orden</span></button>
+      <button type="button" class="ghost" id="delCancel">Cancelar</button>
+    </form>
+  </div>
+
   <!-- Barra inferior (móvil) -->
   <nav class="dock" id="dock" aria-label="Acciones rápidas" hidden>
     <button type="button" class="dock-tab is-active" data-view="orden" aria-label="Nueva orden">
