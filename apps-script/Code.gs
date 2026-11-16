@@ -9,6 +9,7 @@
  *               el comprobante digital de entrega (PDF en Drive, mismo folio). Si ya estaba
  *               completada, devuelve el comprobante existente para reenviarlo.
  *   setPlan     Cambia el plan de pago: «Anticipo y liquidación» o «Varios pagos».
+ *   getOrder    Orden completa con la firma, para la versión imprimible (solo por excepción).
  *   deleteOrder Solo administradores (ADMIN_EMAILS): mueve la orden a la hoja «Órdenes eliminadas»
  *               con quién, cuándo y motivo, y la quita de «Órdenes». El folio no se reutiliza.
  *   payment  Uso interno de la función de cobros (Firebase): marca el pago del anticipo.
