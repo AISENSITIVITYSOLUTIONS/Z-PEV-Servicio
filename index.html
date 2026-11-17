@@ -162,9 +162,19 @@
         <form id="orderForm" class="form" novalidate>
 
           <!-- 01 Cliente -->
-          <section class="card" id="cliente" aria-labelledby="s1">
+          <section class="card" id="fotos" aria-labelledby="s0">
             <header class="card-head">
               <span class="index">01</span>
+              <h2 id="s0">Fotos del vehículo</h2>
+              <span class="head-note photo-count">0 de 8</span>
+            </header>
+            <p class="hint photo-intro">La vista completa es obligatoria: identifica la unidad aunque haya dos modelos iguales.</p>
+            <div class="photo-grid"></div>
+          </section>
+
+          <section class="card" id="cliente" aria-labelledby="s1">
+            <header class="card-head">
+              <span class="index">02</span>
               <h2 id="s1">Cliente</h2>
             </header>
             <div class="grid grid-2">
@@ -192,7 +202,7 @@
           <!-- 02 Vehículo -->
           <section class="card" aria-labelledby="s2">
             <header class="card-head">
-              <span class="index">02</span>
+              <span class="index">03</span>
               <h2 id="s2">Datos del vehículo</h2>
             </header>
             <div class="grid grid-2">
@@ -223,7 +233,7 @@
           <!-- 03 Servicio -->
           <section class="card" aria-labelledby="s3">
             <header class="card-head">
-              <span class="index">03</span>
+              <span class="index">04</span>
               <h2 id="s3">Servicio y condición</h2>
             </header>
             <div class="grid">
@@ -242,7 +252,7 @@
           <!-- 04 Accesorios -->
           <section class="card" aria-labelledby="s4">
             <header class="card-head">
-              <span class="index">04</span>
+              <span class="index">05</span>
               <h2 id="s4">Accesorios recibidos</h2>
             </header>
             <div class="grid grid-3">
@@ -264,7 +274,7 @@
           <!-- 05 Presupuesto -->
           <section class="card" aria-labelledby="s5">
             <header class="card-head">
-              <span class="index">05</span>
+              <span class="index">06</span>
               <h2 id="s5">Presupuesto y pagos</h2>
             </header>
             <div class="grid grid-2">
@@ -313,7 +323,7 @@
           <!-- 06 Términos -->
           <section class="card" id="terminos" aria-labelledby="s6">
             <header class="card-head">
-              <span class="index">06</span>
+              <span class="index">07</span>
               <h2 id="s6">Términos y condiciones</h2>
             </header>
             <p class="terms-intro">Lee el contrato completo. La casilla se habilita al llegar al final.</p>
@@ -332,7 +342,7 @@
           <!-- 07 Firma -->
           <section class="card" id="firma" aria-labelledby="s7">
             <header class="card-head">
-              <span class="index">07</span>
+              <span class="index">08</span>
               <h2 id="s7">Firma del cliente</h2>
               <span class="head-note">Firma con el dedo o el mouse</span>
             </header>
@@ -373,6 +383,7 @@
             </div>
 
             <div class="receipt-body">
+              <div class="pv-photo" id="pvPhoto" hidden><img alt="Vista completa del vehículo" /><span class="pv-photo-n mono" id="pvPhotoN"></span></div>
               <div class="pair">
                 <div>
                   <span class="k">Cliente</span>
@@ -412,6 +423,7 @@
           <div class="checks" id="checks" aria-live="polite">
             <span class="k">Antes de enviar</span>
             <ul class="checklist">
+              <li data-check="fotos"><i></i>Foto de la vista completa</li>
               <li data-check="cliente"><i></i>Nombre y teléfono a 10 dígitos</li>
               <li data-check="vehiculo"><i></i>Marca y modelo del vehículo</li>
               <li data-check="servicio"><i></i>Descripción del servicio</li>
@@ -605,7 +617,7 @@
       <span>Historial</span>
     </button>
     <button type="submit" form="orderForm" class="dock-cta" id="dockCta" disabled>
-      <span class="dock-progress mono" id="dockProgress">0/6</span>
+      <span class="dock-progress mono" id="dockProgress">0/7</span>
       <span class="dock-label" id="dockLabel">Completa la orden</span>
     </button>
   </nav>

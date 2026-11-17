@@ -94,3 +94,13 @@ Con cobros activos: `firebase deploy --only functions:billing,hosting` (ver `doc
 - Cada orden lleva un **ID de captura**; si un envío llegó pero la respuesta se perdió, el reintento devuelve el
   mismo folio y no se duplica la fila.
 - La hoja suma las columnas **ID de captura** y **Capturado en (dispositivo)** automáticamente.
+
+## Fotos del vehículo
+
+- Primera sección de la orden: **Vista completa** (obligatoria), Frente/manubrio, N° de serie, Golpes o detalles
+  y hasta 4 fotos extra (máximo 8). Abre la cámara trasera del teléfono.
+- Cada foto se reduce en el teléfono (1600 px, JPEG ≈ 0.72; unos 100–350 KB) antes de enviarse.
+- La vista completa viaja con la orden; las demás se suben una por una. Si se cae la señal, se reanudan desde la
+  cola sin repetir la orden ni duplicar fotos.
+- Drive: `Firmas/Fotos/<folio>/<folio>-<toma>.jpg`. La hoja guarda **Foto principal**, **Fotos (carpeta)** y **N.º de fotos**;
+  el historial muestra la miniatura de la unidad.

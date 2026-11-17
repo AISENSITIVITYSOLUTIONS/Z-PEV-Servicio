@@ -46,7 +46,8 @@ const HEADERS = [
   'ID de captura', 'Capturado en (dispositivo)',
   'Método de pago', 'Aplazo cartId', 'Aplazo loanId', 'Aplazo link', 'Aplazo monto', 'Aplazo estado',
   'Aplazo actualizado', 'Aplazo reembolsado', 'Aplazo generado por',
-  'Plan de pago', 'Abonos (MXN)', 'Liberada por', 'Liberada el', 'Comprobante de entrega'
+  'Plan de pago', 'Abonos (MXN)', 'Liberada por', 'Liberada el', 'Comprobante de entrega',
+  'Foto principal', 'Fotos (carpeta)', 'N.º de fotos'
 ];
 const DELETED_SHEET = 'Órdenes eliminadas';
 const DEFAULT_ADMINS = ['fdealbam@nni.ai', 'fdealbam@gmail.com', 'estebans690@gmail.com'];
@@ -104,6 +105,10 @@ function doPost(e) {
       if (action === 'setPlan') return json_(setPlan_(sheet, data));
       return json_(completeOrder_(sheet, data, email));
     }
+    if (action === 'photo') {
+      lock.waitLock(20000);
+      return json_(addPhoto_(sheet, data, props));
+    }
     if (action !== 'create') return json_({ ok: false, error: 'Acción no reconocida.' });
 
     const problem = validate_(data);
@@ -147,6 +152,12 @@ function doPost(e) {
     set('Capturado en (dispositivo)', data.capturadoEn ? new Date(data.capturadoEn) : '');
     set('Plan de pago', PLANS.indexOf(data.plan) >= 0 ? data.plan : PLANS[0]);
     set('Abonos (MXN)', 0);
+    if (isJpeg_(data.fotoPrincipal)) {
+      const f = savePhoto_(props.getProperty('DRIVE_FOLDER_ID'), folio, 'vista', 'Vista completa', data.fotoPrincipal);
+      set('Foto principal', f.url);
+      set('Fotos (carpeta)', f.folderUrl);
+      set('N.º de fotos', 1);
+    }
     sheet.appendRow(row);
     SpreadsheetApp.flush();
 
@@ -183,7 +194,10 @@ function listOrders_(sheet, limit) {
       abonos: num_(r[COL['Abonos (MXN)']]),
       comprobanteUrl: r[COL['Comprobante de entrega']] || '',
       receiptUrl: r[COL['Estatus']] === 'Completada' ? receiptUrl_(r[COL['Folio']]) : '',
-      entregada: fmtDate_(r[COL['Liberada el']])
+      entregada: fmtDate_(r[COL['Liberada el']]),
+      fotoId: driveId_(r[COL['Foto principal']]),
+      fotosUrl: r[COL['Fotos (carpeta)']] || '',
+      fotos: num_(r[COL['N.º de fotos']])
     };
   });
   return { ok: true, orders: orders, monthCount: monthCount_(sheet) };
@@ -760,6 +774,69 @@ function nextFolio_(sheet) {
   seq += 1;
   props.setProperty('FOLIO_SEQ', String(seq));
   return 'ZE-' + ('000' + seq).slice(-Math.max(4, String(seq).length));
+}
+
+/* ---------- Fotos del vehículo ---------- */
+
+const MAX_PHOTO_CHARS = 4 * 1024 * 1024; // ≈3 MB de JPEG en base64
+
+function isJpeg_(dataUrl) {
+  return typeof dataUrl === 'string' && dataUrl.indexOf('data:image/jpeg;base64,') === 0 && dataUrl.length < MAX_PHOTO_CHARS;
+}
+
+function driveId_(url) {
+  const m = String(url || '').match(/[-\w]{25,}/);
+  return m ? m[0] : '';
+}
+
+/** Carpeta Fotos/<folio> dentro de la carpeta de firmas. */
+function photoFolder_(rootId, folio) {
+  const root = DriveApp.getFolderById(rootId);
+  const it = root.getFoldersByName('Fotos');
+  const fotos = it.hasNext() ? it.next() : root.createFolder('Fotos');
+  const f = fotos.getFoldersByName(folio);
+  if (f.hasNext()) return f.next();
+  const folder = fotos.createFolder(folio);
+  folder.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  return folder;
+}
+
+/** Guarda una foto como <folio>-<slot>.jpg; si ya existe (reintento) no la duplica. */
+function savePhoto_(rootId, folio, slot, label, dataUrl) {
+  const folder = photoFolder_(rootId, folio);
+  const safeSlot = String(slot).replace(/[^a-z0-9-]/gi, '').slice(0, 20) || 'foto';
+  const name = folio + '-' + safeSlot + '.jpg';
+  const existing = folder.getFilesByName(name);
+  let file;
+  if (existing.hasNext()) {
+    file = existing.next();
+  } else {
+    const blob = Utilities.newBlob(Utilities.base64Decode(dataUrl.split(',')[1]), 'image/jpeg', name);
+    file = folder.createFile(blob);
+    file.setDescription(clip_(label, 80));
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  }
+  let count = 0;
+  const all = folder.getFiles();
+  while (all.hasNext()) { all.next(); count += 1; }
+  return { url: file.getUrl(), folderUrl: folder.getUrl(), count: count };
+}
+
+/** Acción photo: agrega una foto a una orden existente. Solo desde el mismo equipo que la capturó. */
+function addPhoto_(sheet, data, props) {
+  if (!/^ZE-(?:\d{8}-)?\d{4,}$/.test(String(data.folio || ''))) return { ok: false, error: 'Folio inválido.' };
+  if (!isJpeg_(data.dataUrl)) return { ok: false, error: 'La foto no es válida o es demasiado grande.' };
+  const r = orderRow_(sheet, data.folio);
+  if (!r) return { ok: false, error: 'Folio no encontrado.' };
+  const capturedId = sheet.getRange(r, COL['ID de captura'] + 1).getValue();
+  if (capturedId && data.clientId !== capturedId) return { ok: false, error: 'La foto no corresponde a esta orden.' };
+  const f = savePhoto_(props.getProperty('DRIVE_FOLDER_ID'), data.folio, data.slot, data.label, data.dataUrl);
+  if (data.slot === 'vista' || !sheet.getRange(r, COL['Foto principal'] + 1).getValue()) {
+    sheet.getRange(r, COL['Foto principal'] + 1).setValue(f.url);
+  }
+  sheet.getRange(r, COL['Fotos (carpeta)'] + 1).setValue(f.folderUrl);
+  sheet.getRange(r, COL['N.º de fotos'] + 1).setValue(f.count);
+  return { ok: true, folio: data.folio, fotos: f.count };
 }
 
 function saveSignature_(folderId, folio, dataUrl) {

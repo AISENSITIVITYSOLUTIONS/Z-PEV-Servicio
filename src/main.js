@@ -4,7 +4,8 @@ import { mountHero } from './hero3d.js';
 import { mountSignature } from './signature.js';
 import { initAuth, getSession, getKnownUser, signOut, renderGoogleButton } from './auth.js';
 import { enqueue, listPending, removePending, updatePending, newClientId, requestPersistence, isNetworkError, isAuthError } from './queue.js';
-import { API_URL, PAYMENTS_ENABLED, APLAZO_ENABLED, createOrder, listOrders, addPayment, setPaymentPlan, completeOrder, deleteOrder, createPaymentLink, createAplazoLink, cancelAplazoLink } from './api.js';
+import { mountPhotos } from './photos.js';
+import { API_URL, PAYMENTS_ENABLED, APLAZO_ENABLED, uploadPhoto, createOrder, listOrders, addPayment, setPaymentPlan, completeOrder, deleteOrder, createPaymentLink, createAplazoLink, cancelAplazoLink } from './api.js';
 import { initPWA } from './pwa.js';
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
@@ -84,6 +85,12 @@ const signature = mountSignature($('#sigScene'), {
 });
 sigReady = true;
 
+// ================= Fotos del vehículo =================
+const photos = mountPhotos($('#fotos'), {
+  onChange: () => updatePreview(),
+  onError: (msg) => toast(msg, 'error')
+});
+
 // ================= Valores y validación =================
 function values() {
   const enc = form.querySelector('input[name="encendido"]:checked');
@@ -112,6 +119,7 @@ function values() {
 
 function validate(v) {
   const checks = {
+    fotos: Boolean(photos && photos.main()),
     cliente: v.nombre.length >= 3 && v.telefono.length === 10,
     vehiculo: v.marca.length >= 2,
     servicio: v.servicio.length >= 5,
@@ -126,6 +134,10 @@ function validate(v) {
 function updatePreview() {
   const v = values();
   const { ok, checks } = validate(v);
+  const main = photos && photos.main();
+  $('#pvPhoto').hidden = !main;
+  if (main && $('#pvPhoto img').src !== main.dataUrl) $('#pvPhoto img').src = main.dataUrl;
+  $('#pvPhotoN').textContent = photos && photos.count() > 1 ? `${photos.count()} fotos` : '';
   const saldo = Math.max(v.total - v.anticipo, 0);
   $('#saldo').value = saldo.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -169,7 +181,7 @@ function updatePreview() {
   const dockCta = $('#dockCta');
   dockCta.disabled = !ok || overpaid;
   dockCta.classList.toggle('is-ready', ok && !overpaid);
-  $('#dockProgress').textContent = `${done}/6`;
+  $('#dockProgress').textContent = `${done}/${Object.keys(checks).length}`;
   $('#dockLabel').textContent = overpaid ? 'Anticipo mayor al costo' : ok ? 'Enviar orden' : 'Completa la orden';
 }
 
@@ -301,6 +313,15 @@ function renderHistory() {
     tds[1].children[0].textContent = o.cliente;
     tds[1].children[1].textContent = formatPhone(digits(o.telefono));
     tds[2].children[0].textContent = o.marca;
+    if (o.fotoId) {
+      const a = Object.assign(document.createElement('a'), { className: 'td-thumb', href: o.fotosUrl || '#', target: '_blank', rel: 'noopener', title: `Ver ${o.fotos || 1} foto(s)` });
+      const img = Object.assign(document.createElement('img'), { src: `https://drive.google.com/thumbnail?id=${encodeURIComponent(o.fotoId)}&sz=w240`, alt: `Foto de ${o.marca}`, loading: 'lazy', referrerPolicy: 'no-referrer' });
+      img.addEventListener('error', () => a.remove());
+      a.append(img);
+      if (o.fotos > 1) a.append(Object.assign(document.createElement('span'), { className: 'mono', textContent: `${o.fotos}` }));
+      tds[2].prepend(a);
+      tds[2].classList.add('has-thumb');
+    }
     tds[3].textContent = fmtMXN(o.total);
     tds[4].textContent = fmtMXN(o.saldo);
     tds[5].firstElementChild.textContent = STATUS[key];
@@ -755,7 +776,11 @@ async function renderPending() {
     const name = Object.assign(document.createElement('span'), { className: 'td-main', textContent: `${it.order.nombre} · ${it.order.marca}` });
     const meta = Object.assign(document.createElement('span'), {
       className: 'td-sub',
-      textContent: it.error ? `No se pudo enviar: ${it.error}` : `Capturada ${fmtTime(it.queuedAt)}${it.attempts ? ` · ${it.attempts} intento(s)` : ''}`
+      textContent: it.error
+        ? `No se pudo enviar: ${it.error}`
+        : it.order._folio
+          ? `${it.order._folio} registrada · faltan ${(it.order.fotos || []).length - (it.order._sent || []).length} foto(s)`
+          : `Capturada ${fmtTime(it.queuedAt)}${(it.order.fotos?.length || 0) + (it.order.fotoPrincipal ? 1 : 0) ? ` · ${(it.order.fotos?.length || 0) + (it.order.fotoPrincipal ? 1 : 0)} fotos` : ''}${it.attempts ? ` · ${it.attempts} intento(s)` : ''}`
     });
     main.append(name, meta);
     li.append(main);
@@ -793,7 +818,7 @@ async function syncQueue(manual = false) {
   try {
     for (const it of items) {
       try {
-        const res = await createOrder(session.token, it.order);
+        const res = await deliverOrder(session.token, it.order, () => updatePending(it));
         await removePending(it.clientId);
         sent.push(res.folio);
         if (Number.isFinite(res.monthCount)) paintMonth(res.monthCount);
@@ -824,8 +849,30 @@ const MISSING = {
   servicio: 'descripción del servicio',
   encendido: 'si el vehículo está encendido',
   terminos: 'aceptar los términos',
-  firma: 'firma del cliente'
+  firma: 'firma del cliente',
+  fotos: 'foto de la vista completa'
 };
+
+/**
+ * Envía una orden y luego sus fotos, una por una. El avance (folio y fotos enviadas) queda en la
+ * propia orden; persist() lo guarda en la cola para reanudar sin repetir nada si se cae la señal.
+ */
+async function deliverOrder(token, order, persist = async () => {}) {
+  let res = null;
+  if (!order._folio) {
+    res = await createOrder(token, order);
+    order._folio = res.folio;
+    order._sent = order._sent || [];
+    await persist();
+  }
+  for (const ph of order.fotos || []) {
+    if ((order._sent || []).includes(ph.slot)) continue;
+    await uploadPhoto(token, { folio: order._folio, clientId: order.clientId, slot: ph.slot, label: ph.label, dataUrl: ph.dataUrl });
+    order._sent = [...(order._sent || []), ph.slot];
+    await persist();
+  }
+  return { folio: order._folio, monthCount: res?.monthCount };
+}
 
 async function saveOffline(order, reason) {
   await enqueue(order);
@@ -871,7 +918,9 @@ form.addEventListener('submit', async (e) => {
     llaves: v.llaves,
     cargador: v.cargador,
     otros: v.otros,
-    firmaPng: signature.toDataURL()
+    firmaPng: signature.toDataURL(),
+    fotoPrincipal: photos.main()?.dataUrl || '',
+    fotos: photos.list().filter((p) => p.slot !== 'vista')
   };
 
   session = getSession();
@@ -883,13 +932,23 @@ form.addEventListener('submit', async (e) => {
   submitBtn.classList.add('is-loading');
   submitLabel.textContent = 'Guardando orden…';
   try {
-    const res = await createOrder(session.token, order);
+    submitLabel.textContent = order.fotos.length ? `Guardando orden y ${order.fotos.length + 1} fotos…` : 'Guardando orden…';
+    const res = await deliverOrder(session.token, order);
     lastOrder = { ...order, folio: res.folio };
     clearDraft();
     showSuccess(lastOrder);
     if (Number.isFinite(res.monthCount)) paintMonth(res.monthCount);
   } catch (err) {
-    if (isNetworkError(err)) {
+    if (order._folio && (isNetworkError(err) || isAuthError(err))) {
+      // La orden ya tiene folio; solo faltan fotos. Se terminan de subir desde la cola.
+      await enqueue(order);
+      requestPersistence();
+      lastOrder = { ...order, folio: order._folio };
+      clearDraft();
+      showSuccess(lastOrder);
+      renderPending();
+      toast('Orden registrada. Algunas fotos se terminarán de subir al volver la señal.', 'warn');
+    } else if (isNetworkError(err)) {
       await saveOffline(order, 'Se perdió la señal: la orden quedó guardada en el teléfono y se enviará sola.');
     } else if (isAuthError(err)) {
       await saveOffline(order, 'Tu sesión venció: la orden quedó guardada en el teléfono. Inicia sesión para enviarla.');
@@ -1049,6 +1108,7 @@ function resetForm() {
   const planDefault = form.querySelector('input[name="plan"][value="Anticipo y liquidación"]');
   if (planDefault) planDefault.checked = true;
   signature.clear();
+  photos.clear();
   acepta.disabled = true;
   acepta.checked = false;
   termsRead = false;

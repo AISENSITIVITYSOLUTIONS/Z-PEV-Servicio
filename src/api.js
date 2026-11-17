@@ -29,7 +29,13 @@ async function postSheets(body, timeoutMs = 30000) {
 }
 
 export function createOrder(idToken, order) {
-  return postSheets({ action: 'create', idToken, ...order });
+  // Las fotos adicionales no viajan aquí: se suben una por una con uploadPhoto().
+  const { fotos, _folio, _sent, ...body } = order;
+  return postSheets({ action: 'create', idToken, ...body, fotosTotal: (fotos?.length || 0) + (order.fotoPrincipal ? 1 : 0) }, 60000);
+}
+
+export function uploadPhoto(idToken, { folio, clientId, slot, label, dataUrl }) {
+  return postSheets({ action: 'photo', idToken, folio, clientId, slot, label, dataUrl }, 60000);
 }
 
 export function listOrders(idToken, limit = 60) {
