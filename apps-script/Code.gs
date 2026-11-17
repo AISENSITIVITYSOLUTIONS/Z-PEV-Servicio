@@ -122,6 +122,9 @@ function doPost(e) {
     // Idempotencia: un reintento desde la cola del teléfono no duplica la orden.
     const existing = findByClientId_(sheet, data.clientId);
     if (existing) return json_({ ok: true, folio: existing, duplicate: true, monthCount: monthCount_(sheet) });
+    const same = findRecentSame_(sheet, data);
+    // Misma orden capturada otra vez: se devuelve el folio existente y no se suben fotos de nuevo.
+    if (same) return json_({ ok: true, folio: same, duplicate: true, skipPhotos: true, monthCount: monthCount_(sheet) });
 
     const folio = nextFolio_(sheet);
     const firmaUrl = saveSignature_(props.getProperty('DRIVE_FOLDER_ID'), folio, data.firmaPng);
@@ -223,6 +226,33 @@ function findByClientId_(sheet, clientId) {
   const ids = sheet.getRange(2, col, last - 1, 1).getValues();
   for (let i = ids.length - 1; i >= 0; i--) {
     if (ids[i][0] === clientId) return sheet.getRange(i + 2, 1).getValue();
+  }
+  return '';
+}
+
+/**
+ * Segunda defensa contra órdenes duplicadas: la misma orden (mismo teléfono, vehículo, serie,
+ * servicio, estado y costo) registrada hace menos de DUP_WINDOW_MIN minutos devuelve el folio
+ * existente. Cubre reenvíos desde versiones viejas de la app (sin ID de captura) y dobles toques.
+ * Dos unidades iguales del mismo cliente se distinguen por la serie o por la descripción.
+ */
+const DUP_WINDOW_MIN = 10;
+function findRecentSame_(sheet, data) {
+  const last = sheet.getLastRow();
+  if (last < 2) return '';
+  const from = Math.max(2, last - 40);
+  const rows = sheet.getRange(from, 1, last - from + 1, HEADERS.length).getValues();
+  const norm = function (v) { return String(v == null ? '' : v).replace(/^'/, '').trim().toLowerCase(); };
+  const want = [norm(data.telefono), norm(data.marca), norm(data.serie), norm(data.servicio), norm(data.caracteristicas)];
+  const cost = num_(data.presupuesto);
+  const limit = Date.now() - DUP_WINDOW_MIN * 60000;
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const r = rows[i];
+    const reg = r[COL['Registrado']];
+    if (!(reg instanceof Date) || reg.getTime() < limit) continue;
+    const have = [norm(r[COL['Teléfono']]), norm(r[COL['Marca y modelo']]), norm(r[COL['N° de serie']]),
+      norm(r[COL['Descripción del servicio']]), norm(r[COL['Características generales']])];
+    if (have.join('|') === want.join('|') && num_(r[COL['Costo presupuesto (MXN)']]) === cost) return r[COL['Folio']];
   }
   return '';
 }

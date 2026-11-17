@@ -881,7 +881,7 @@ async function deliverOrder(token, order, persist = async () => {}) {
   if (!order._folio) {
     res = await createOrder(token, order);
     order._folio = res.folio;
-    order._sent = order._sent || [];
+    order._sent = res.skipPhotos ? (order.fotos || []).map((p) => p.slot) : (order._sent || []);
     await persist();
   }
   for (const ph of order.fotos || []) {
