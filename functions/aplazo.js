@@ -20,7 +20,7 @@
 
 const { env, isTrue, send, httpError, FOLIO_RE, verifyStaff, sheets, notifySheets, safeEqual } = require('./common');
 
-const CART_RE = /^(ZE-(?:\d{8}-)?\d{4,})-A[0-9a-z]{6,12}$/;
+const CART_RE = /^((?:ZPEV-\d{2}-\d{4,}|ZE-(?:\d{8}-)?\d{4,}))-A[0-9a-z]{6,12}$/;
 const RESERVE_GRACE_MS = 2 * 60 * 1000;
 
 const PENDING = new Set(['Reservado', 'Pendiente']);

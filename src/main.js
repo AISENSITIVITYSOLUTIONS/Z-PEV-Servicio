@@ -700,7 +700,7 @@ function showApp(s) {
   const params = new URLSearchParams(location.search);
   const vista = params.get('vista');
   const folioQr = params.get('folio');
-  if (folioQr && /^ZE-(?:\d{8}-)?\d{4,}$/.test(folioQr)) {
+  if (folioQr && /^(?:ZPEV-\d{2}-\d{4,}|ZE-(?:\d{8}-)?\d{4,})$/.test(folioQr)) {
     // QR de la etiqueta: abre el Historial con la nota de esa orden.
     history.replaceState(null, '', location.pathname);
     setView('historial');
@@ -1110,7 +1110,7 @@ function showSuccess(o, { offline = false } = {}) {
 
   if (!offline) {
     const msg = `Hola ${o.nombre}, Z e-Scooters México registró tu orden ${o.folio} para ${o.marca}. `
-      + `Servicio: ${o.servicio}. Costo: ${fmtMXN(o.total)}; anticipo: ${fmtMXN(o.anticipo)}; total a pagar: ${fmtMXN(o.saldo)}. `
+      + `Servicio: ${o.servicio}. Costo presupuesto: ${fmtMXN(o.total)}; anticipo: ${fmtMXN(o.anticipo)}; total a pagar: ${fmtMXN(o.saldo)}. `
       + 'Te avisaremos por este medio cuando tu vehículo esté listo. Consultas: 55 6501 8583.';
     $('#okWa').href = waLink(o.telefono, msg);
   }

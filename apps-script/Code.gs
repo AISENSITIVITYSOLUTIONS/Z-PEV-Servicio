@@ -50,6 +50,8 @@ const HEADERS = [
   'Foto principal', 'Fotos (carpeta)', 'N.º de fotos'
 ];
 const DELETED_SHEET = 'Órdenes eliminadas';
+// Folio actual ZPEV-26-0001; se siguen aceptando los anteriores ZE-0001 y ZE-AAAAMMDD-0001.
+const FOLIO_RE = /^(?:ZPEV-\d{2}-\d{4,}|ZE-(?:\d{8}-)?\d{4,})$/;
 const DEFAULT_ADMINS = ['fdealbam@nni.ai', 'fdealbam@gmail.com', 'estebans690@gmail.com'];
 const PAYMENTS_SHEET = 'Pagos';
 const PAYMENT_HEADERS = ['Folio', 'Fecha', 'Tipo', 'Monto (MXN)', 'Método', 'Nota', 'Registrado por', 'Saldo después (MXN)'];
@@ -345,7 +347,7 @@ function receiptUrl_(folio) {
 /** Datos mínimos para la página del cliente: sin teléfono completo ni correos del personal. */
 function publicReceipt_(q) {
   const folio = String(q.f || '');
-  if (!/^ZE-(?:\d{8}-)?\d{4,}$/.test(folio)) return { ok: false, error: 'Comprobante no válido.' };
+  if (!FOLIO_RE.test(folio)) return { ok: false, error: 'Comprobante no válido.' };
   const expected = receiptToken_(folio);
   const got = String(q.t || '');
   let diff = expected.length ^ got.length;
@@ -743,38 +745,38 @@ function getSheet_(sheetId) {
   return sheet;
 }
 
-/**
- * Folio consecutivo único: ZE-0001, ZE-0002… (no se reinicia por día ni por año).
- * El contador vive en la propiedad FOLIO_SEQ. La primera vez arranca después de todas las
- * órdenes existentes (incluidas las eliminadas y las de formato anterior ZE-AAAAMMDD-NNNN),
- * así la numeración continúa sin huecos ni repeticiones. Se llama con el candado tomado.
- */
 function ensureColumns_(sheet) {
   const missing = HEADERS.length - sheet.getMaxColumns();
   if (missing > 0) sheet.insertColumnsAfter(sheet.getMaxColumns(), missing);
   return true;
 }
 
+/**
+ * Folio consecutivo por año: ZPEV-26-0001, ZPEV-26-0002… y en 2027 empieza en ZPEV-27-0001.
+ * El contador vive en la propiedad FOLIO_SEQ_<AA>. Si falta, se reconstruye con el mayor folio
+ * ZPEV del año en la hoja y en «Órdenes eliminadas», así nunca se repite. Se llama con el candado tomado.
+ */
 function nextFolio_(sheet) {
   const props = PropertiesService.getScriptProperties();
-  let seq = parseInt(props.getProperty('FOLIO_SEQ'), 10);
+  const yy = Utilities.formatDate(new Date(), TZ, 'yy');
+  const key = 'FOLIO_SEQ_' + yy;
+  let seq = parseInt(props.getProperty(key), 10);
   if (!(seq >= 0)) {
     seq = 0;
+    const re = new RegExp('^ZPEV-' + yy + '-(\\d+)$');
     [sheet, sheet.getParent().getSheetByName(DELETED_SHEET)].forEach(function (sh) {
       if (!sh) return;
       const last = sh.getLastRow();
       if (last < 2) return;
       sh.getRange(2, 1, last - 1, 1).getValues().forEach(function (r) {
-        const f = String(r[0]);
-        const m = f.match(/^ZE-(\d+)$/);
+        const m = String(r[0]).match(re);
         if (m) seq = Math.max(seq, parseInt(m[1], 10));
-        else if (/^ZE-/.test(f)) seq += 1;
       });
     });
   }
   seq += 1;
-  props.setProperty('FOLIO_SEQ', String(seq));
-  return 'ZE-' + ('000' + seq).slice(-Math.max(4, String(seq).length));
+  props.setProperty(key, String(seq));
+  return 'ZPEV-' + yy + '-' + ('000' + seq).slice(-Math.max(4, String(seq).length));
 }
 
 /* ---------- Nota de servicio ---------- */
@@ -875,7 +877,7 @@ function savePhoto_(rootId, folio, slot, label, dataUrl) {
 
 /** Acción photo: agrega una foto a una orden existente. Solo desde el mismo equipo que la capturó. */
 function addPhoto_(sheet, data, props) {
-  if (!/^ZE-(?:\d{8}-)?\d{4,}$/.test(String(data.folio || ''))) return { ok: false, error: 'Folio inválido.' };
+  if (!FOLIO_RE.test(String(data.folio || ''))) return { ok: false, error: 'Folio inválido.' };
   if (!isJpeg_(data.dataUrl)) return { ok: false, error: 'La foto no es válida o es demasiado grande.' };
   const r = orderRow_(sheet, data.folio);
   if (!r) return { ok: false, error: 'Folio no encontrado.' };
