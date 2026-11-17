@@ -27,7 +27,7 @@ acento lima `#D9F84A`, vista previa tipo comprobante).
 | Pieza | Dónde | Función |
 |---|---|---|
 | Frontend | Vite + JS + three.js → Firebase Hosting | Formulario, firma, historial |
-| Registro | Google Apps Script + Sheets + Drive | Folio `ZE-AAAAMMDD-NNNN`, filas, firmas |
+| Registro | Google Apps Script + Sheets + Drive | Folio `ZPEV-AA-NNNN` (consecutivo por año), filas, firmas |
 | Cobros | Firebase Function `billing` (Node 22) | Mercado Pago (Checkout Pro), oculto |
 | Pago a plazos | Firebase Function `aplazo` (Node 22) | Aplazo (Online API) y su webhook |
 | Conciliación | Firebase Function `aplazoSweep` (cada 60 min) | Pagos de Aplazo sin webhook y links vencidos |
@@ -113,4 +113,4 @@ En **Historial**, el ícono de documento (o el folio) abre la nota de cualquier 
 
 ## Etiqueta interna con QR
 
-El botón **Etiqueta** (en la confirmación y en la nota del Historial) imprime una etiqueta de 100 × 70 mm para pegar en el vehículo. Lleva el folio grande, la foto, el cliente, el vehículo, el servicio, la fecha y un QR. El QR abre la app en `/?folio=ZE-0001`, que muestra la nota de esa orden; para verla hay que tener sesión iniciada. Funciona con impresoras de etiquetas o con hoja normal.
+El botón **Etiqueta** (en la confirmación y en la nota del Historial) imprime una etiqueta de 100 × 70 mm para pegar en el vehículo. Lleva el folio grande, la foto, el cliente, el vehículo, el servicio, la fecha y un QR. El QR abre la app en `/?folio=ZPEV-26-0001`, que muestra la nota de esa orden; para verla hay que tener sesión iniciada. Funciona con impresoras de etiquetas o con hoja normal.
