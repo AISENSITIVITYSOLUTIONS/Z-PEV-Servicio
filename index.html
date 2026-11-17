@@ -503,7 +503,7 @@
         <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.2 4.2L19 7"/></svg>
       </div>
       <h3 id="okTitle">Orden registrada</h3>
-      <p class="success-offline" id="okOffline" hidden>Sin señal: la orden y la firma quedaron guardadas en este teléfono. Se enviarán solas al volver la conexión y recibirán su folio.</p>
+      <p class="success-offline" id="okOffline" hidden>Sin señal: la orden y la firma quedaron guardadas en este teléfono. Se enviarán solas al volver la conexión y recibirán su folio; después envía la nota al cliente desde Historial.</p>
       <p class="success-folio mono" id="okFolio">ZE-</p>
       <p class="success-text">Quedó guardada en la hoja del taller con la firma del cliente.</p>
       <div class="pay-block" id="payBlock" hidden>
@@ -529,8 +529,41 @@
           <p class="pay-note">Aplazo sujeto a aprobación. Montos de $100 en adelante.</p>
         </section>
       </div>
-      <a class="ghost wa-btn" id="okWa" target="_blank" rel="noopener">Enviar comprobante por WhatsApp</a>
+      <div class="note-actions" id="okNoteActions">
+        <button type="button" class="note-share" id="okNoteShare">
+          <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3M8 7l4-4 4 4"/><path d="M5 11v9h14v-9"/></svg>
+          Enviar nota al cliente
+        </button>
+        <button type="button" class="ghost" id="okNoteView">Ver nota</button>
+        <button type="button" class="ghost" id="okNotePdf">PDF</button>
+      </div>
+      <a class="link-btn wa-text" id="okWa" target="_blank" rel="noopener">Solo mensaje de WhatsApp, sin archivo</a>
       <button type="button" class="cta" id="newBtn"><span class="cta-label">Capturar otra orden</span></button>
+    </div>
+  </div>
+
+  <!-- Nota de servicio (vista y envío) -->
+  <div class="overlay note-overlay" id="noteView" hidden>
+    <div class="note-card" role="dialog" aria-modal="true" aria-labelledby="noteTitle">
+      <header class="note-head">
+        <div>
+          <span class="note-kicker">Nota de servicio</span>
+          <h3 id="noteTitle" class="mono">—</h3>
+        </div>
+        <button type="button" class="note-close" id="noteClose" aria-label="Cerrar">
+          <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </header>
+      <div class="note-body" id="noteBody"><p class="note-loading">Preparando la nota…</p></div>
+      <footer class="note-foot">
+        <button type="button" class="note-share" id="noteShare" disabled>
+          <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3M8 7l4-4 4 4"/><path d="M5 11v9h14v-9"/></svg>
+          Enviar al cliente
+        </button>
+        <button type="button" class="ghost" id="notePdf" disabled>PDF</button>
+        <button type="button" class="ghost" id="notePng" disabled>Imagen</button>
+        <a class="ghost" id="notePhotos" target="_blank" rel="noopener" hidden>Fotos</a>
+      </footer>
     </div>
   </div>
 

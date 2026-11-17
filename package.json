@@ -10,6 +10,7 @@
     "preview": "vite preview --host"
   },
   "dependencies": {
+    "jspdf": "^2.5.2",
     "three": "^0.169.0"
   },
   "devDependencies": {

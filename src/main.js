@@ -5,7 +5,8 @@ import { mountSignature } from './signature.js';
 import { initAuth, getSession, getKnownUser, signOut, renderGoogleButton } from './auth.js';
 import { enqueue, listPending, removePending, updatePending, newClientId, requestPersistence, isNetworkError, isAuthError } from './queue.js';
 import { mountPhotos } from './photos.js';
-import { API_URL, PAYMENTS_ENABLED, APLAZO_ENABLED, uploadPhoto, createOrder, listOrders, addPayment, setPaymentPlan, completeOrder, deleteOrder, createPaymentLink, createAplazoLink, cancelAplazoLink } from './api.js';
+import { renderNote, noteToPdf, canvasToBlob, shareNote, noteFileName } from './note.js';
+import { API_URL, PAYMENTS_ENABLED, APLAZO_ENABLED, uploadPhoto, getOrderDetail, createOrder, listOrders, addPayment, setPaymentPlan, completeOrder, deleteOrder, createPaymentLink, createAplazoLink, cancelAplazoLink } from './api.js';
 import { initPWA } from './pwa.js';
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
@@ -287,6 +288,7 @@ const ICON_PAY = svg('<rect x="3" y="6" width="18" height="12" rx="2"/><path d="
 const ICON_DONE = svg('<path d="M5 12.5l4.2 4.2L19 7"/>');
 const ICON_RCPT = svg('<path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/>');
 const ICON_DEL = svg('<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/>');
+const ICON_NOTE = svg('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/>');
 const ICON_SIG = svg('<path d="M3 17c3-2 4 2 6 0s3-4 5-2 2 3 4 1"/><path d="M3 21h18"/>');
 
 function renderHistory() {
@@ -326,6 +328,15 @@ function renderHistory() {
     tds[4].textContent = fmtMXN(o.saldo);
     tds[5].firstElementChild.textContent = STATUS[key];
     const actions = tds[6].firstElementChild;
+    {
+      const b = Object.assign(document.createElement('button'), { type: 'button', className: 'icon-btn is-note', title: 'Nota de servicio' });
+      b.innerHTML = ICON_NOTE;
+      b.setAttribute('aria-label', `Nota de servicio de la orden ${o.folio}`);
+      b.addEventListener('click', () => openNoteForFolio(o.folio));
+      actions.append(b);
+    }
+    tds[0].classList.add('is-link');
+    tds[0].addEventListener('click', () => openNoteForFolio(o.folio));
     if (digits(o.telefono).length === 10) {
       const a = Object.assign(document.createElement('a'), { className: 'icon-btn', href: waLink(o.telefono, msg), target: '_blank', rel: 'noopener', title: 'Escribir por WhatsApp' });
       a.innerHTML = ICON_WA;
@@ -963,6 +974,110 @@ form.addEventListener('submit', async (e) => {
   }
 });
 
+// ================= Nota de servicio =================
+let noteSource = null; // datos de la última orden registrada (con foto y firma locales)
+let noteCurrent = null; // { data, canvas }
+
+function noteDataFromOrder(o) {
+  return {
+    folio: o.folio, fecha: o.fecha, hora: o.hora, nombre: o.nombre, telefono: o.telefono,
+    marca: o.marca, serie: o.serie, encendido: o.encendido, servicio: o.servicio,
+    caracteristicas: o.caracteristicas, llaves: o.llaves, cargador: o.cargador, otros: o.otros,
+    presupuesto: o.presupuesto, anticipo: o.anticipo, saldo: o.saldo ?? Math.max(num(o.total) - num(o.anticipo), 0),
+    fotos: (o.fotos?.length || 0) + (o.fotoPrincipal ? 1 : 0),
+    fotoUrl: o.fotoPrincipal || '', firmaUrl: o.firmaPng || ''
+  };
+}
+
+const noteView = $('#noteView');
+function setNoteButtons(on) { ['#noteShare', '#notePdf', '#notePng'].forEach((id) => { $(id).disabled = !on; }); }
+
+function openNoteShell(title) {
+  $('#noteTitle').textContent = title;
+  $('#noteBody').replaceChildren(Object.assign(document.createElement('p'), { className: 'note-loading', textContent: 'Preparando la nota…' }));
+  $('#notePhotos').hidden = true;
+  setNoteButtons(false);
+  noteView.hidden = false;
+  requestAnimationFrame(() => noteView.classList.add('is-in'));
+}
+
+async function showNote(data) {
+  noteCurrent = null;
+  const canvas = await renderNote(data);
+  noteCurrent = { data, canvas };
+  const img = Object.assign(document.createElement('img'), { src: canvas.toDataURL('image/png'), alt: `Nota de servicio ${data.folio}` });
+  $('#noteBody').replaceChildren(img);
+  $('#noteTitle').textContent = data.folio;
+  if (data.fotosUrl) { $('#notePhotos').href = data.fotosUrl; $('#notePhotos').hidden = false; }
+  setNoteButtons(true);
+}
+
+async function openNote(data) {
+  openNoteShell(data.folio);
+  try { await showNote(data); } catch (err) { $('#noteBody .note-loading').textContent = `No se pudo generar la nota: ${err.message}`; }
+}
+
+async function openNoteForFolio(folio) {
+  openNoteShell(folio);
+  session = getSession();
+  if (!navigator.onLine || !session) {
+    $('#noteBody .note-loading').textContent = !navigator.onLine
+      ? 'Sin conexión: la nota se genera con los datos de la hoja. Inténtalo al volver la señal.'
+      : 'Inicia sesión para ver la nota.';
+    return;
+  }
+  try {
+    const { order } = await getOrderDetail(session.token, folio);
+    await showNote(order);
+  } catch (err) {
+    const el = $('#noteBody .note-loading');
+    if (el) el.textContent = `No se pudo cargar la nota: ${err.message}`;
+  }
+}
+
+function closeNote() { noteView.classList.remove('is-in'); noteView.hidden = true; }
+$('#noteClose').addEventListener('click', closeNote);
+noteView.addEventListener('click', (e) => { if (e.target === noteView) closeNote(); });
+
+const noteText = (d) => `Nota de servicio ${d.folio} · Z e-Scooters México. Consultas: 55 6501 8583.`;
+
+async function sendNote(kind = 'png') {
+  if (!noteCurrent) return;
+  const { data, canvas } = noteCurrent;
+  try {
+    const blob = kind === 'pdf' ? await noteToPdf(canvas, data) : await canvasToBlob(canvas, 'image/png');
+    const r = await shareNote(blob, noteFileName(data, kind), noteText(data));
+    if (r === 'downloaded') toast(kind === 'pdf' ? 'PDF descargado. Adjúntalo en WhatsApp o correo.' : 'Imagen descargada. Adjúntala en WhatsApp.', 'ok');
+  } catch (err) {
+    toast(`No se pudo preparar la nota: ${err.message}`, 'error');
+  }
+}
+$('#noteShare').addEventListener('click', () => sendNote('png'));
+$('#notePng').addEventListener('click', async () => {
+  if (!noteCurrent) return;
+  const blob = await canvasToBlob(noteCurrent.canvas, 'image/png');
+  const url = URL.createObjectURL(blob);
+  const a = Object.assign(document.createElement('a'), { href: url, download: noteFileName(noteCurrent.data, 'png') });
+  document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 4000);
+});
+$('#notePdf').addEventListener('click', () => sendNote('pdf'));
+
+// Desde la confirmación: la nota se arma con la foto y firma que ya están en el teléfono.
+async function noteFromSuccess(kind) {
+  if (!noteSource) return;
+  if (kind === 'view') return openNote(noteSource);
+  try {
+    const canvas = await renderNote(noteSource);
+    noteCurrent = { data: noteSource, canvas };
+    await sendNote(kind);
+  } catch (err) {
+    toast(`No se pudo preparar la nota: ${err.message}`, 'error');
+  }
+}
+$('#okNoteShare').addEventListener('click', () => noteFromSuccess('png'));
+$('#okNotePdf').addEventListener('click', () => noteFromSuccess('pdf'));
+$('#okNoteView').addEventListener('click', () => noteFromSuccess('view'));
+
 // ================= Confirmación =================
 const overlay = $('#success');
 function showSuccess(o, { offline = false } = {}) {
@@ -971,6 +1086,8 @@ function showSuccess(o, { offline = false } = {}) {
   $('#okOffline').hidden = !offline;
   $('.success-text', overlay).hidden = offline;
   $('#okWa').hidden = offline;
+  $('#okNoteActions').hidden = offline;
+  noteSource = offline ? null : noteDataFromOrder(o);
   $('.success-mark', overlay).classList.toggle('is-pending', offline);
 
   if (!offline) {

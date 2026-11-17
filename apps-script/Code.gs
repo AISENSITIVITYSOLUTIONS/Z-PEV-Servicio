@@ -105,6 +105,7 @@ function doPost(e) {
       if (action === 'setPlan') return json_(setPlan_(sheet, data));
       return json_(completeOrder_(sheet, data, email));
     }
+    if (action === 'detail') return json_(orderDetail_(sheet, data));
     if (action === 'photo') {
       lock.waitLock(20000);
       return json_(addPhoto_(sheet, data, props));
@@ -774,6 +775,56 @@ function nextFolio_(sheet) {
   seq += 1;
   props.setProperty('FOLIO_SEQ', String(seq));
   return 'ZE-' + ('000' + seq).slice(-Math.max(4, String(seq).length));
+}
+
+/* ---------- Nota de servicio ---------- */
+
+function driveDataUrl_(url, mime) {
+  const id = driveId_(url);
+  if (!id) return '';
+  try {
+    const blob = DriveApp.getFileById(id).getBlob();
+    return 'data:' + (mime || blob.getContentType()) + ';base64,' + Utilities.base64Encode(blob.getBytes());
+  } catch (err) {
+    return '';
+  }
+}
+
+/** Datos completos de una orden para la nota de servicio (incluye firma y foto principal). */
+function orderDetail_(sheet, data) {
+  const r = orderRow_(sheet, data.folio);
+  if (!r) return { ok: false, error: 'Folio no encontrado.' };
+  const v = sheet.getRange(r, 1, 1, HEADERS.length).getValues()[0];
+  const g = function (h) { return v[COL[h]]; };
+  const fecha = g('Fecha de orden');
+  const hora = g('Hora');
+  return {
+    ok: true,
+    order: {
+      folio: g('Folio'),
+      fecha: fecha instanceof Date ? Utilities.formatDate(fecha, TZ, 'yyyy-MM-dd') : String(fecha || ''),
+      hora: hora instanceof Date ? Utilities.formatDate(hora, TZ, 'HH:mm') : String(hora || '').slice(0, 5),
+      nombre: g('Cliente'),
+      telefono: String(g('Teléfono')).replace(/^'/, ''),
+      marca: g('Marca y modelo'),
+      serie: g('N° de serie'),
+      encendido: g('Encendido'),
+      servicio: g('Descripción del servicio'),
+      caracteristicas: g('Características generales'),
+      llaves: g('Llaves o NFC'),
+      cargador: g('Cargador'),
+      otros: g('Otros accesorios'),
+      presupuesto: num_(g('Costo presupuesto (MXN)')),
+      anticipo: num_(g('Anticipo (MXN)')),
+      total: num_(g('Total (MXN)')),
+      saldo: num_(g('Saldo pendiente (MXN)')),
+      estatus: g('Estatus'),
+      fotos: num_(g('N.º de fotos')),
+      fotosUrl: g('Fotos (carpeta)') || '',
+      firmaUrl: driveDataUrl_(g('Firma (enlace)'), 'image/png'),
+      fotoUrl: driveDataUrl_(g('Foto principal'), 'image/jpeg')
+    }
+  };
 }
 
 /* ---------- Fotos del vehículo ---------- */
