@@ -797,3 +797,12 @@ button.icon-btn { cursor: pointer; font: inherit; }
 .cta.is-danger { background: #B42318; color: #FFFFFF; }
 #delDlg .success-text { text-align: left; margin: 0; }
 .cta.is-danger .cta-label { color: #FFFFFF; }
+
+/* Fecha y hora automáticas */
+.stamp {
+  display: flex; align-items: center; gap: 10px; height: 42px; padding: 0 14px;
+  border-radius: var(--r-sm); background: var(--paper-2); border: 1px solid var(--line);
+  color: var(--ink); font-size: 14px; font-weight: 500;
+}
+.stamp svg { color: var(--muted); flex: none; }
+@media (max-width: 900px) { .stamp { height: 46px; font-size: 15px; } }

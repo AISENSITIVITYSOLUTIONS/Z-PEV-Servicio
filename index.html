@@ -176,15 +176,15 @@
                 <label for="telefono">Teléfono</label>
                 <input id="telefono" name="telefono" class="input mono" type="tel" inputmode="tel" autocomplete="tel" placeholder="10 dígitos" maxlength="16" required />
               </div>
-              <div class="grid-dt">
-                <div class="field">
-                  <label for="fecha">Fecha</label>
-                  <input id="fecha" name="fecha" class="input mono" type="date" required />
+              <div class="field">
+                <span class="label" id="lbl-stamp">Fecha y hora</span>
+                <div class="stamp" aria-labelledby="lbl-stamp" aria-describedby="stampHint">
+                  <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+                  <span class="mono" id="stampText">—</span>
                 </div>
-                <div class="field">
-                  <label for="hora">Hora</label>
-                  <input id="hora" name="hora" class="input mono" type="time" required />
-                </div>
+                <input id="fecha" name="fecha" type="hidden" />
+                <input id="hora" name="hora" type="hidden" />
+                <span class="hint" id="stampHint">Automática: se registra al enviar la orden.</span>
               </div>
             </div>
           </section>
@@ -269,7 +269,7 @@
             </header>
             <div class="grid grid-2">
               <div class="field span-2">
-                <label for="presupuesto">Costo del servicio</label>
+                <label for="presupuesto">Costo presupuesto</label>
                 <div class="money">
                   <span class="money-sign">$</span>
                   <input id="presupuesto" name="presupuesto" class="input mono" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00" />
@@ -397,7 +397,7 @@
               <div class="rule"></div>
 
               <dl class="sums">
-                <div><dt>Costo del servicio</dt><dd class="mono" id="pvPresup">$0.00</dd></div>
+                <div><dt>Costo presupuesto</dt><dd class="mono" id="pvPresup">$0.00</dd></div>
                 <div><dt>Anticipo</dt><dd class="mono" id="pvAnticipo">$0.00</dd></div>
                 <div class="sum-total"><dt>Total a pagar</dt><dd class="mono" id="pvSaldo">$0.00</dd></div>
               </dl>

@@ -39,7 +39,7 @@ const TZ = 'America/Mexico_City';
 const HEADERS = [
   'Folio', 'Registrado', 'Fecha de orden', 'Hora', 'Cliente', 'Teléfono', 'Marca y modelo', 'N° de serie',
   'Descripción del servicio', 'Características generales', 'Encendido',
-  'Presupuesto aprox. (MXN)', 'Anticipo (MXN)', 'Total (MXN)', 'Saldo pendiente (MXN)',
+  'Costo presupuesto (MXN)', 'Anticipo (MXN)', 'Total (MXN)', 'Saldo pendiente (MXN)',
   'Llaves o NFC', 'Cargador', 'Otros accesorios',
   'Términos aceptados', 'Versión de términos', 'Firma (enlace)', 'Estatus', 'Capturado por',
   'Pago anticipo', 'Referencia de pago',
@@ -130,7 +130,7 @@ function doPost(e) {
     set('Descripción del servicio', clip_(data.servicio, 2000));
     set('Características generales', clip_(data.caracteristicas, 2000));
     set('Encendido', data.encendido === 'Sí' ? 'Sí' : 'No');
-    set('Presupuesto aprox. (MXN)', num_(data.presupuesto));
+    set('Costo presupuesto (MXN)', num_(data.presupuesto));
     set('Anticipo (MXN)', num_(data.anticipo));
     set('Total (MXN)', num_(data.total));
     set('Saldo pendiente (MXN)', Math.max(num_(data.total) - num_(data.anticipo), 0));
@@ -190,11 +190,11 @@ function listOrders_(sheet, limit) {
 }
 
 function monthCount_(sheet) {
-  const prefix = 'ZE-' + Utilities.formatDate(new Date(), TZ, 'yyyyMM');
+  const month = Utilities.formatDate(new Date(), TZ, 'yyyyMM');
   const last = sheet.getLastRow();
   if (last < 2) return 0;
-  return sheet.getRange(2, 1, last - 1, 1).getValues().filter(function (r) {
-    return String(r[0]).indexOf(prefix) === 0;
+  return sheet.getRange(2, COL['Registrado'] + 1, last - 1, 1).getValues().filter(function (r) {
+    return r[0] instanceof Date && Utilities.formatDate(r[0], TZ, 'yyyyMM') === month;
   }).length;
 }
 
@@ -330,7 +330,7 @@ function receiptUrl_(folio) {
 /** Datos mínimos para la página del cliente: sin teléfono completo ni correos del personal. */
 function publicReceipt_(q) {
   const folio = String(q.f || '');
-  if (!/^ZE-\d{8}-\d{4}$/.test(folio)) return { ok: false, error: 'Comprobante no válido.' };
+  if (!/^ZE-(?:\d{8}-)?\d{4,}$/.test(folio)) return { ok: false, error: 'Comprobante no válido.' };
   const expected = receiptToken_(folio);
   const got = String(q.t || '');
   let diff = expected.length ^ got.length;
@@ -479,7 +479,7 @@ function deliveryReceipt_(sheet, r, folderId) {
       '</table></div>' +
       '<div class="card"><div class="eyebrow" style="margin-bottom:8px">Pagos recibidos</div><table>' +
         '<tr class="h"><th>Concepto</th><th>Fecha</th><th>Método</th><th style="text-align:right">Monto</th></tr>' + tr +
-        '<tr class="tot"><td class="c" colspan="3">Costo del servicio</td><td class="c n">' + money_(total) + '</td></tr>' +
+        '<tr class="tot"><td class="c" colspan="3">Costo presupuesto</td><td class="c n">' + money_(total) + '</td></tr>' +
         '<tr class="tot"><td class="c" colspan="3">Total pagado</td><td class="c n">' + money_(pagado) + '</td></tr>' +
         '<tr class="grand"><td colspan="3">Saldo pendiente</td><td class="n">' + money_(Math.max(total - pagado, 0)) + '</td></tr>' +
       '</table></div>' +
@@ -709,10 +709,10 @@ function getSheet_(sheetId) {
     sheet.setFrozenRows(1);
     sheet.getRange(1, 1, 1, HEADERS.length).setFontWeight('bold').setBackground('#0F1115').setFontColor('#D9F84A');
     sheet.getRange(2, COL['Registrado'] + 1, sheet.getMaxRows() - 1, 1).setNumberFormat('dd/mm/yyyy hh:mm');
-    sheet.getRange(2, COL['Presupuesto aprox. (MXN)'] + 1, sheet.getMaxRows() - 1, 4).setNumberFormat('$#,##0.00');
+    sheet.getRange(2, COL['Costo presupuesto (MXN)'] + 1, sheet.getMaxRows() - 1, 4).setNumberFormat('$#,##0.00');
     const rule = SpreadsheetApp.newDataValidation().requireValueInList(STATUS_OPTIONS, true).setAllowInvalid(false).build();
     sheet.getRange(2, COL['Estatus'] + 1, sheet.getMaxRows() - 1, 1).setDataValidation(rule);
-  } else if (sheet.getLastColumn() < HEADERS.length || sheet.getRange(1, HEADERS.length).getValue() !== HEADERS[HEADERS.length - 1]) {
+  } else if (ensureColumns_(sheet) && sheet.getRange(1, 1, 1, HEADERS.length).getValues()[0].join('|') !== HEADERS.join('|')) {
     // Migración: hojas creadas con una versión anterior reciben las columnas nuevas.
     sheet.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS])
       .setFontWeight('bold').setBackground('#0F1115').setFontColor('#D9F84A');
@@ -728,21 +728,38 @@ function getSheet_(sheetId) {
   return sheet;
 }
 
+/**
+ * Folio consecutivo único: ZE-0001, ZE-0002… (no se reinicia por día ni por año).
+ * El contador vive en la propiedad FOLIO_SEQ. La primera vez arranca después de todas las
+ * órdenes existentes (incluidas las eliminadas y las de formato anterior ZE-AAAAMMDD-NNNN),
+ * así la numeración continúa sin huecos ni repeticiones. Se llama con el candado tomado.
+ */
+function ensureColumns_(sheet) {
+  const missing = HEADERS.length - sheet.getMaxColumns();
+  if (missing > 0) sheet.insertColumnsAfter(sheet.getMaxColumns(), missing);
+  return true;
+}
+
 function nextFolio_(sheet) {
-  const today = Utilities.formatDate(new Date(), TZ, 'yyyyMMdd');
-  const prefix = 'ZE-' + today + '-';
-  let seq = 0;
-  // También revisa las órdenes eliminadas: un folio nunca se reutiliza.
-  [sheet, sheet.getParent().getSheetByName(DELETED_SHEET)].forEach(function (sh) {
-    if (!sh) return;
-    const last = sh.getLastRow();
-    if (last < 2) return;
-    sh.getRange(2, 1, last - 1, 1).getValues().forEach(function (r) {
-      const f = String(r[0]);
-      if (f.indexOf(prefix) === 0) seq = Math.max(seq, parseInt(f.slice(prefix.length), 10) || 0);
+  const props = PropertiesService.getScriptProperties();
+  let seq = parseInt(props.getProperty('FOLIO_SEQ'), 10);
+  if (!(seq >= 0)) {
+    seq = 0;
+    [sheet, sheet.getParent().getSheetByName(DELETED_SHEET)].forEach(function (sh) {
+      if (!sh) return;
+      const last = sh.getLastRow();
+      if (last < 2) return;
+      sh.getRange(2, 1, last - 1, 1).getValues().forEach(function (r) {
+        const f = String(r[0]);
+        const m = f.match(/^ZE-(\d+)$/);
+        if (m) seq = Math.max(seq, parseInt(m[1], 10));
+        else if (/^ZE-/.test(f)) seq += 1;
+      });
     });
-  });
-  return prefix + ('000' + (seq + 1)).slice(-4);
+  }
+  seq += 1;
+  props.setProperty('FOLIO_SEQ', String(seq));
+  return 'ZE-' + ('000' + seq).slice(-Math.max(4, String(seq).length));
 }
 
 function saveSignature_(folderId, folio, dataUrl) {

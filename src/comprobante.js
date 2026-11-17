@@ -49,7 +49,7 @@ async function load() {
   const q = new URLSearchParams(location.search);
   const f = q.get('f') || '';
   const t = q.get('t') || '';
-  if (!/^ZE-\d{8}-\d{4}$/.test(f) || !t || !API_URL) return fail();
+  if (!/^ZE-(?:\d{8}-)?\d{4,}$/.test(f) || !t || !API_URL) return fail();
   try {
     const res = await fetch(`${API_URL}?action=receipt&f=${encodeURIComponent(f)}&t=${encodeURIComponent(t)}`);
     const data = await res.json();

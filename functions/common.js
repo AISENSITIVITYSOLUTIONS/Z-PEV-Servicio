@@ -11,7 +11,8 @@ const isTrue = (k) => env(k).toLowerCase() === 'true';
 const send = (res, code, body) => res.status(code).json(body);
 const httpError = (message, code, extra = {}) => Object.assign(new Error(message), { code, ...extra });
 
-const FOLIO_RE = /^ZE-\d{8}-\d{4}$/;
+// Folio consecutivo ZE-0001 (actual) o ZE-AAAAMMDD-0001 (órdenes anteriores).
+const FOLIO_RE = /^ZE-(?:\d{8}-)?\d{4,}$/;
 
 /** Personal autorizado: ID token de Google válido y correo en ALLOWED_EMAILS. */
 async function verifyStaff(req) {

@@ -446,7 +446,7 @@ function deliveryMessage(o, url) {
   return `Estimado(a) ${nombre}:\n\n`
     + `Le confirmamos que el servicio de su *${o.marca}* fue *concluido y entregado*.\n\n`
     + `*Folio:* ${o.folio}\n`
-    + `*Costo del servicio:* ${fmtMXN(o.total)} · pagado en su totalidad\n`
+    + `*Costo presupuesto:* ${fmtMXN(o.total)} · pagado en su totalidad\n`
     + `*Entrega:* ${o.entregada || new Date().toLocaleDateString('es-MX')}\n\n`
     + `Su comprobante digital de entrega está disponible aquí:\n${url}\n\n`
     + `Gracias por confiar su vehículo a *Z e-Scooters México*. Quedamos a sus órdenes en este mismo número.`;
@@ -847,6 +847,9 @@ form.addEventListener('submit', async (e) => {
   }
   if (!API_URL) return toast('Configura VITE_API_URL con la URL de la Web App de Apps Script.', 'error');
 
+  setNowDefaults();
+  v.fecha = $('#fecha').value;
+  v.hora = $('#hora').value;
   const order = {
     clientId: newClientId(),
     termsVersion: TERMS_VERSION,
@@ -1030,11 +1033,16 @@ $('#newBtn').addEventListener('click', () => {
   resetForm();
 });
 
+// Fecha y hora automáticas: no se editan; se refrescan cada 20 s y se fijan al enviar.
+const DIAS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
+const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 function setNowDefaults() {
   const now = new Date();
   $('#fecha').value = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
   $('#hora').value = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  $('#stampText').textContent = `${DIAS[now.getDay()]} ${now.getDate()} ${MESES[now.getMonth()]} ${now.getFullYear()} · ${$('#hora').value}`;
 }
+setInterval(() => { if (!overlay || overlay.hidden) setNowDefaults(); }, 20000);
 
 function resetForm() {
   form.reset();
