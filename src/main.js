@@ -5,6 +5,7 @@ import { mountSignature } from './signature.js';
 import { initAuth, getSession, getKnownUser, signOut, renderGoogleButton } from './auth.js';
 import { enqueue, listPending, removePending, updatePending, newClientId, requestPersistence, isNetworkError, isAuthError } from './queue.js';
 import { mountPhotos } from './photos.js';
+import { renderTag, printTag } from './tag.js';
 import { renderNote, noteToPdf, canvasToBlob, shareNote, noteFileName } from './note.js';
 import { API_URL, PAYMENTS_ENABLED, APLAZO_ENABLED, uploadPhoto, getOrderDetail, createOrder, listOrders, addPayment, setPaymentPlan, completeOrder, deleteOrder, createPaymentLink, createAplazoLink, cancelAplazoLink } from './api.js';
 import { initPWA } from './pwa.js';
@@ -696,8 +697,15 @@ function showApp(s) {
   session = s;
   offlineUser = null;
   enterApp(s);
-  const vista = new URLSearchParams(location.search).get('vista');
-  if (vista === 'historial') setView('historial');
+  const params = new URLSearchParams(location.search);
+  const vista = params.get('vista');
+  const folioQr = params.get('folio');
+  if (folioQr && /^ZE-(?:\d{8}-)?\d{4,}$/.test(folioQr)) {
+    // QR de la etiqueta: abre el Historial con la nota de esa orden.
+    history.replaceState(null, '', location.pathname);
+    setView('historial');
+    openNoteForFolio(folioQr);
+  } else if (vista === 'historial') setView('historial');
   else if (API_URL) listOrders(s.token, 1).then((r) => paintMonth(r.monthCount)).catch(() => {});
   syncQueue();
 }
@@ -990,7 +998,7 @@ function noteDataFromOrder(o) {
 }
 
 const noteView = $('#noteView');
-function setNoteButtons(on) { ['#noteShare', '#notePdf', '#notePng'].forEach((id) => { $(id).disabled = !on; }); }
+function setNoteButtons(on) { ['#noteShare', '#notePdf', '#notePng', '#noteTag'].forEach((id) => { $(id).disabled = !on; }); }
 
 function openNoteShell(title) {
   $('#noteTitle').textContent = title;
@@ -1061,6 +1069,16 @@ $('#notePng').addEventListener('click', async () => {
   document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 4000);
 });
 $('#notePdf').addEventListener('click', () => sendNote('pdf'));
+
+async function printOrderTag(data) {
+  try {
+    printTag(await renderTag(data), data.folio);
+  } catch (err) {
+    toast(`No se pudo preparar la etiqueta: ${err.message}`, 'error');
+  }
+}
+$('#noteTag').addEventListener('click', () => noteCurrent && printOrderTag(noteCurrent.data));
+$('#okTag').addEventListener('click', () => noteSource && printOrderTag(noteSource));
 
 // Desde la confirmación: la nota se arma con la foto y firma que ya están en el teléfono.
 async function noteFromSuccess(kind) {

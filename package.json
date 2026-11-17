@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "jspdf": "^2.5.2",
+    "qrcode": "^1.5.4",
     "three": "^0.169.0"
   },
   "devDependencies": {

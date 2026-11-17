@@ -110,3 +110,7 @@ Con cobros activos: `firebase deploy --only functions:billing,hosting` (ver `doc
 Al registrar una orden aparece **Enviar nota al cliente**: genera una imagen (PNG) con folio, fecha, hora, cliente, teléfono, vehículo, foto principal, servicio, costos y firma, y abre la hoja de compartir del teléfono (WhatsApp, correo…). El botón **PDF** genera la misma nota en PDF. Si el navegador no puede compartir archivos, la nota se descarga.
 
 En **Historial**, el ícono de documento (o el folio) abre la nota de cualquier orden, incluidas las que se guardaron sin conexión, con los datos de la hoja (acción `detail` del Apps Script, que devuelve la firma y la foto en base64).
+
+## Etiqueta interna con QR
+
+El botón **Etiqueta** (en la confirmación y en la nota del Historial) imprime una etiqueta de 100 × 70 mm para pegar en el vehículo. Lleva el folio grande, la foto, el cliente, el vehículo, el servicio, la fecha y un QR. El QR abre la app en `/?folio=ZE-0001`, que muestra la nota de esa orden; para verla hay que tener sesión iniciada. Funciona con impresoras de etiquetas o con hoja normal.
