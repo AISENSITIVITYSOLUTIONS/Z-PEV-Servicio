@@ -4,7 +4,10 @@ import { mountHero } from './hero3d.js';
 import { mountSignature } from './signature.js';
 import { initAuth, getSession, getKnownUser, signOut, renderGoogleButton } from './auth.js';
 import { enqueue, listPending, removePending, updatePending, newClientId, requestPersistence, isNetworkError, isAuthError } from './queue.js';
-import { API_URL, PAYMENTS_ENABLED, APLAZO_ENABLED, createOrder, listOrders, addPayment, setPaymentPlan, completeOrder, deleteOrder, createPaymentLink, createAplazoLink, cancelAplazoLink } from './api.js';
+import { mountPhotos } from './photos.js';
+import { renderTag, printTag } from './tag.js';
+import { renderNote, noteToPdf, canvasToBlob, shareNote, noteFileName } from './note.js';
+import { API_URL, PAYMENTS_ENABLED, APLAZO_ENABLED, uploadPhoto, getOrderDetail, createOrder, listOrders, addPayment, setPaymentPlan, completeOrder, deleteOrder, createPaymentLink, createAplazoLink, cancelAplazoLink } from './api.js';
 import { initPWA } from './pwa.js';
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
@@ -84,6 +87,12 @@ const signature = mountSignature($('#sigScene'), {
 });
 sigReady = true;
 
+// ================= Fotos del vehículo =================
+const photos = mountPhotos($('#fotos'), {
+  onChange: () => updatePreview(),
+  onError: (msg) => toast(msg, 'error')
+});
+
 // ================= Valores y validación =================
 function values() {
   const enc = form.querySelector('input[name="encendido"]:checked');
@@ -112,6 +121,7 @@ function values() {
 
 function validate(v) {
   const checks = {
+    fotos: Boolean(photos && photos.main()),
     cliente: v.nombre.length >= 3 && v.telefono.length === 10,
     vehiculo: v.marca.length >= 2,
     servicio: v.servicio.length >= 5,
@@ -126,6 +136,10 @@ function validate(v) {
 function updatePreview() {
   const v = values();
   const { ok, checks } = validate(v);
+  const main = photos && photos.main();
+  $('#pvPhoto').hidden = !main;
+  if (main && $('#pvPhoto img').src !== main.dataUrl) $('#pvPhoto img').src = main.dataUrl;
+  $('#pvPhotoN').textContent = photos && photos.count() > 1 ? `${photos.count()} fotos` : '';
   const saldo = Math.max(v.total - v.anticipo, 0);
   $('#saldo').value = saldo.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -169,7 +183,7 @@ function updatePreview() {
   const dockCta = $('#dockCta');
   dockCta.disabled = !ok || overpaid;
   dockCta.classList.toggle('is-ready', ok && !overpaid);
-  $('#dockProgress').textContent = `${done}/6`;
+  $('#dockProgress').textContent = `${done}/${Object.keys(checks).length}`;
   $('#dockLabel').textContent = overpaid ? 'Anticipo mayor al costo' : ok ? 'Enviar orden' : 'Completa la orden';
 }
 
@@ -275,6 +289,7 @@ const ICON_PAY = svg('<rect x="3" y="6" width="18" height="12" rx="2"/><path d="
 const ICON_DONE = svg('<path d="M5 12.5l4.2 4.2L19 7"/>');
 const ICON_RCPT = svg('<path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/>');
 const ICON_DEL = svg('<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/>');
+const ICON_NOTE = svg('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/>');
 const ICON_SIG = svg('<path d="M3 17c3-2 4 2 6 0s3-4 5-2 2 3 4 1"/><path d="M3 21h18"/>');
 
 function renderHistory() {
@@ -301,10 +316,28 @@ function renderHistory() {
     tds[1].children[0].textContent = o.cliente;
     tds[1].children[1].textContent = formatPhone(digits(o.telefono));
     tds[2].children[0].textContent = o.marca;
+    if (o.fotoId) {
+      const a = Object.assign(document.createElement('a'), { className: 'td-thumb', href: o.fotosUrl || '#', target: '_blank', rel: 'noopener', title: `Ver ${o.fotos || 1} foto(s)` });
+      const img = Object.assign(document.createElement('img'), { src: `https://drive.google.com/thumbnail?id=${encodeURIComponent(o.fotoId)}&sz=w240`, alt: `Foto de ${o.marca}`, loading: 'lazy', referrerPolicy: 'no-referrer' });
+      img.addEventListener('error', () => a.remove());
+      a.append(img);
+      if (o.fotos > 1) a.append(Object.assign(document.createElement('span'), { className: 'mono', textContent: `${o.fotos}` }));
+      tds[2].prepend(a);
+      tds[2].classList.add('has-thumb');
+    }
     tds[3].textContent = fmtMXN(o.total);
     tds[4].textContent = fmtMXN(o.saldo);
     tds[5].firstElementChild.textContent = STATUS[key];
     const actions = tds[6].firstElementChild;
+    {
+      const b = Object.assign(document.createElement('button'), { type: 'button', className: 'icon-btn is-note', title: 'Nota de servicio' });
+      b.innerHTML = ICON_NOTE;
+      b.setAttribute('aria-label', `Nota de servicio de la orden ${o.folio}`);
+      b.addEventListener('click', () => openNoteForFolio(o.folio));
+      actions.append(b);
+    }
+    tds[0].classList.add('is-link');
+    tds[0].addEventListener('click', () => openNoteForFolio(o.folio));
     if (digits(o.telefono).length === 10) {
       const a = Object.assign(document.createElement('a'), { className: 'icon-btn', href: waLink(o.telefono, msg), target: '_blank', rel: 'noopener', title: 'Escribir por WhatsApp' });
       a.innerHTML = ICON_WA;
@@ -446,7 +479,7 @@ function deliveryMessage(o, url) {
   return `Estimado(a) ${nombre}:\n\n`
     + `Le confirmamos que el servicio de su *${o.marca}* fue *concluido y entregado*.\n\n`
     + `*Folio:* ${o.folio}\n`
-    + `*Costo del servicio:* ${fmtMXN(o.total)} · pagado en su totalidad\n`
+    + `*Costo presupuesto:* ${fmtMXN(o.total)} · pagado en su totalidad\n`
     + `*Entrega:* ${o.entregada || new Date().toLocaleDateString('es-MX')}\n\n`
     + `Su comprobante digital de entrega está disponible aquí:\n${url}\n\n`
     + `Gracias por confiar su vehículo a *Z e-Scooters México*. Quedamos a sus órdenes en este mismo número.`;
@@ -664,8 +697,15 @@ function showApp(s) {
   session = s;
   offlineUser = null;
   enterApp(s);
-  const vista = new URLSearchParams(location.search).get('vista');
-  if (vista === 'historial') setView('historial');
+  const params = new URLSearchParams(location.search);
+  const vista = params.get('vista');
+  const folioQr = params.get('folio');
+  if (folioQr && /^(?:ZPEV-\d{2}-\d{4,}|ZE-(?:\d{8}-)?\d{4,})$/.test(folioQr)) {
+    // QR de la etiqueta: abre el Historial con la nota de esa orden.
+    history.replaceState(null, '', location.pathname);
+    setView('historial');
+    openNoteForFolio(folioQr);
+  } else if (vista === 'historial') setView('historial');
   else if (API_URL) listOrders(s.token, 1).then((r) => paintMonth(r.monthCount)).catch(() => {});
   syncQueue();
 }
@@ -755,7 +795,11 @@ async function renderPending() {
     const name = Object.assign(document.createElement('span'), { className: 'td-main', textContent: `${it.order.nombre} · ${it.order.marca}` });
     const meta = Object.assign(document.createElement('span'), {
       className: 'td-sub',
-      textContent: it.error ? `No se pudo enviar: ${it.error}` : `Capturada ${fmtTime(it.queuedAt)}${it.attempts ? ` · ${it.attempts} intento(s)` : ''}`
+      textContent: it.error
+        ? `No se pudo enviar: ${it.error}`
+        : it.order._folio
+          ? `${it.order._folio} registrada · faltan ${(it.order.fotos || []).length - (it.order._sent || []).length} foto(s)`
+          : `Capturada ${fmtTime(it.queuedAt)}${(it.order.fotos?.length || 0) + (it.order.fotoPrincipal ? 1 : 0) ? ` · ${(it.order.fotos?.length || 0) + (it.order.fotoPrincipal ? 1 : 0)} fotos` : ''}${it.attempts ? ` · ${it.attempts} intento(s)` : ''}`
     });
     main.append(name, meta);
     li.append(main);
@@ -793,7 +837,7 @@ async function syncQueue(manual = false) {
   try {
     for (const it of items) {
       try {
-        const res = await createOrder(session.token, it.order);
+        const res = await deliverOrder(session.token, it.order, () => updatePending(it));
         await removePending(it.clientId);
         sent.push(res.folio);
         if (Number.isFinite(res.monthCount)) paintMonth(res.monthCount);
@@ -824,8 +868,30 @@ const MISSING = {
   servicio: 'descripción del servicio',
   encendido: 'si el vehículo está encendido',
   terminos: 'aceptar los términos',
-  firma: 'firma del cliente'
+  firma: 'firma del cliente',
+  fotos: 'foto de la vista completa'
 };
+
+/**
+ * Envía una orden y luego sus fotos, una por una. El avance (folio y fotos enviadas) queda en la
+ * propia orden; persist() lo guarda en la cola para reanudar sin repetir nada si se cae la señal.
+ */
+async function deliverOrder(token, order, persist = async () => {}) {
+  let res = null;
+  if (!order._folio) {
+    res = await createOrder(token, order);
+    order._folio = res.folio;
+    order._sent = order._sent || [];
+    await persist();
+  }
+  for (const ph of order.fotos || []) {
+    if ((order._sent || []).includes(ph.slot)) continue;
+    await uploadPhoto(token, { folio: order._folio, clientId: order.clientId, slot: ph.slot, label: ph.label, dataUrl: ph.dataUrl });
+    order._sent = [...(order._sent || []), ph.slot];
+    await persist();
+  }
+  return { folio: order._folio, monthCount: res?.monthCount };
+}
 
 async function saveOffline(order, reason) {
   await enqueue(order);
@@ -847,6 +913,9 @@ form.addEventListener('submit', async (e) => {
   }
   if (!API_URL) return toast('Configura VITE_API_URL con la URL de la Web App de Apps Script.', 'error');
 
+  setNowDefaults();
+  v.fecha = $('#fecha').value;
+  v.hora = $('#hora').value;
   const order = {
     clientId: newClientId(),
     termsVersion: TERMS_VERSION,
@@ -868,7 +937,9 @@ form.addEventListener('submit', async (e) => {
     llaves: v.llaves,
     cargador: v.cargador,
     otros: v.otros,
-    firmaPng: signature.toDataURL()
+    firmaPng: signature.toDataURL(),
+    fotoPrincipal: photos.main()?.dataUrl || '',
+    fotos: photos.list().filter((p) => p.slot !== 'vista')
   };
 
   session = getSession();
@@ -880,13 +951,23 @@ form.addEventListener('submit', async (e) => {
   submitBtn.classList.add('is-loading');
   submitLabel.textContent = 'Guardando orden…';
   try {
-    const res = await createOrder(session.token, order);
+    submitLabel.textContent = order.fotos.length ? `Guardando orden y ${order.fotos.length + 1} fotos…` : 'Guardando orden…';
+    const res = await deliverOrder(session.token, order);
     lastOrder = { ...order, folio: res.folio };
     clearDraft();
     showSuccess(lastOrder);
     if (Number.isFinite(res.monthCount)) paintMonth(res.monthCount);
   } catch (err) {
-    if (isNetworkError(err)) {
+    if (order._folio && (isNetworkError(err) || isAuthError(err))) {
+      // La orden ya tiene folio; solo faltan fotos. Se terminan de subir desde la cola.
+      await enqueue(order);
+      requestPersistence();
+      lastOrder = { ...order, folio: order._folio };
+      clearDraft();
+      showSuccess(lastOrder);
+      renderPending();
+      toast('Orden registrada. Algunas fotos se terminarán de subir al volver la señal.', 'warn');
+    } else if (isNetworkError(err)) {
       await saveOffline(order, 'Se perdió la señal: la orden quedó guardada en el teléfono y se enviará sola.');
     } else if (isAuthError(err)) {
       await saveOffline(order, 'Tu sesión venció: la orden quedó guardada en el teléfono. Inicia sesión para enviarla.');
@@ -901,6 +982,120 @@ form.addEventListener('submit', async (e) => {
   }
 });
 
+// ================= Nota de servicio =================
+let noteSource = null; // datos de la última orden registrada (con foto y firma locales)
+let noteCurrent = null; // { data, canvas }
+
+function noteDataFromOrder(o) {
+  return {
+    folio: o.folio, fecha: o.fecha, hora: o.hora, nombre: o.nombre, telefono: o.telefono,
+    marca: o.marca, serie: o.serie, encendido: o.encendido, servicio: o.servicio,
+    caracteristicas: o.caracteristicas, llaves: o.llaves, cargador: o.cargador, otros: o.otros,
+    presupuesto: o.presupuesto, anticipo: o.anticipo, saldo: o.saldo ?? Math.max(num(o.total) - num(o.anticipo), 0),
+    fotos: (o.fotos?.length || 0) + (o.fotoPrincipal ? 1 : 0),
+    fotoUrl: o.fotoPrincipal || '', firmaUrl: o.firmaPng || ''
+  };
+}
+
+const noteView = $('#noteView');
+function setNoteButtons(on) { ['#noteShare', '#notePdf', '#notePng', '#noteTag'].forEach((id) => { $(id).disabled = !on; }); }
+
+function openNoteShell(title) {
+  $('#noteTitle').textContent = title;
+  $('#noteBody').replaceChildren(Object.assign(document.createElement('p'), { className: 'note-loading', textContent: 'Preparando la nota…' }));
+  $('#notePhotos').hidden = true;
+  setNoteButtons(false);
+  noteView.hidden = false;
+  requestAnimationFrame(() => noteView.classList.add('is-in'));
+}
+
+async function showNote(data) {
+  noteCurrent = null;
+  const canvas = await renderNote(data);
+  noteCurrent = { data, canvas };
+  const img = Object.assign(document.createElement('img'), { src: canvas.toDataURL('image/png'), alt: `Nota de servicio ${data.folio}` });
+  $('#noteBody').replaceChildren(img);
+  $('#noteTitle').textContent = data.folio;
+  if (data.fotosUrl) { $('#notePhotos').href = data.fotosUrl; $('#notePhotos').hidden = false; }
+  setNoteButtons(true);
+}
+
+async function openNote(data) {
+  openNoteShell(data.folio);
+  try { await showNote(data); } catch (err) { $('#noteBody .note-loading').textContent = `No se pudo generar la nota: ${err.message}`; }
+}
+
+async function openNoteForFolio(folio) {
+  openNoteShell(folio);
+  session = getSession();
+  if (!navigator.onLine || !session) {
+    $('#noteBody .note-loading').textContent = !navigator.onLine
+      ? 'Sin conexión: la nota se genera con los datos de la hoja. Inténtalo al volver la señal.'
+      : 'Inicia sesión para ver la nota.';
+    return;
+  }
+  try {
+    const { order } = await getOrderDetail(session.token, folio);
+    await showNote(order);
+  } catch (err) {
+    const el = $('#noteBody .note-loading');
+    if (el) el.textContent = `No se pudo cargar la nota: ${err.message}`;
+  }
+}
+
+function closeNote() { noteView.classList.remove('is-in'); noteView.hidden = true; }
+$('#noteClose').addEventListener('click', closeNote);
+noteView.addEventListener('click', (e) => { if (e.target === noteView) closeNote(); });
+
+const noteText = (d) => `Nota de servicio ${d.folio} · Z e-Scooters México. Consultas: 55 6501 8583.`;
+
+async function sendNote(kind = 'png') {
+  if (!noteCurrent) return;
+  const { data, canvas } = noteCurrent;
+  try {
+    const blob = kind === 'pdf' ? await noteToPdf(canvas, data) : await canvasToBlob(canvas, 'image/png');
+    const r = await shareNote(blob, noteFileName(data, kind), noteText(data));
+    if (r === 'downloaded') toast(kind === 'pdf' ? 'PDF descargado. Adjúntalo en WhatsApp o correo.' : 'Imagen descargada. Adjúntala en WhatsApp.', 'ok');
+  } catch (err) {
+    toast(`No se pudo preparar la nota: ${err.message}`, 'error');
+  }
+}
+$('#noteShare').addEventListener('click', () => sendNote('png'));
+$('#notePng').addEventListener('click', async () => {
+  if (!noteCurrent) return;
+  const blob = await canvasToBlob(noteCurrent.canvas, 'image/png');
+  const url = URL.createObjectURL(blob);
+  const a = Object.assign(document.createElement('a'), { href: url, download: noteFileName(noteCurrent.data, 'png') });
+  document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 4000);
+});
+$('#notePdf').addEventListener('click', () => sendNote('pdf'));
+
+async function printOrderTag(data) {
+  try {
+    printTag(await renderTag(data), data.folio);
+  } catch (err) {
+    toast(`No se pudo preparar la etiqueta: ${err.message}`, 'error');
+  }
+}
+$('#noteTag').addEventListener('click', () => noteCurrent && printOrderTag(noteCurrent.data));
+$('#okTag').addEventListener('click', () => noteSource && printOrderTag(noteSource));
+
+// Desde la confirmación: la nota se arma con la foto y firma que ya están en el teléfono.
+async function noteFromSuccess(kind) {
+  if (!noteSource) return;
+  if (kind === 'view') return openNote(noteSource);
+  try {
+    const canvas = await renderNote(noteSource);
+    noteCurrent = { data: noteSource, canvas };
+    await sendNote(kind);
+  } catch (err) {
+    toast(`No se pudo preparar la nota: ${err.message}`, 'error');
+  }
+}
+$('#okNoteShare').addEventListener('click', () => noteFromSuccess('png'));
+$('#okNotePdf').addEventListener('click', () => noteFromSuccess('pdf'));
+$('#okNoteView').addEventListener('click', () => noteFromSuccess('view'));
+
 // ================= Confirmación =================
 const overlay = $('#success');
 function showSuccess(o, { offline = false } = {}) {
@@ -909,11 +1104,13 @@ function showSuccess(o, { offline = false } = {}) {
   $('#okOffline').hidden = !offline;
   $('.success-text', overlay).hidden = offline;
   $('#okWa').hidden = offline;
+  $('#okNoteActions').hidden = offline;
+  noteSource = offline ? null : noteDataFromOrder(o);
   $('.success-mark', overlay).classList.toggle('is-pending', offline);
 
   if (!offline) {
     const msg = `Hola ${o.nombre}, Z e-Scooters México registró tu orden ${o.folio} para ${o.marca}. `
-      + `Servicio: ${o.servicio}. Costo: ${fmtMXN(o.total)}; anticipo: ${fmtMXN(o.anticipo)}; total a pagar: ${fmtMXN(o.saldo)}. `
+      + `Servicio: ${o.servicio}. Costo presupuesto: ${fmtMXN(o.total)}; anticipo: ${fmtMXN(o.anticipo)}; total a pagar: ${fmtMXN(o.saldo)}. `
       + 'Te avisaremos por este medio cuando tu vehículo esté listo. Consultas: 55 6501 8583.';
     $('#okWa').href = waLink(o.telefono, msg);
   }
@@ -1030,17 +1227,23 @@ $('#newBtn').addEventListener('click', () => {
   resetForm();
 });
 
+// Fecha y hora automáticas: no se editan; se refrescan cada 20 s y se fijan al enviar.
+const DIAS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
+const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 function setNowDefaults() {
   const now = new Date();
   $('#fecha').value = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
   $('#hora').value = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  $('#stampText').textContent = `${DIAS[now.getDay()]} ${now.getDate()} ${MESES[now.getMonth()]} ${now.getFullYear()} · ${$('#hora').value}`;
 }
+setInterval(() => { if (!overlay || overlay.hidden) setNowDefaults(); }, 20000);
 
 function resetForm() {
   form.reset();
   const planDefault = form.querySelector('input[name="plan"][value="Anticipo y liquidación"]');
   if (planDefault) planDefault.checked = true;
   signature.clear();
+  photos.clear();
   acepta.disabled = true;
   acepta.checked = false;
   termsRead = false;

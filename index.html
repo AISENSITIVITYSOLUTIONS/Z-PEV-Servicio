@@ -162,9 +162,19 @@
         <form id="orderForm" class="form" novalidate>
 
           <!-- 01 Cliente -->
-          <section class="card" id="cliente" aria-labelledby="s1">
+          <section class="card" id="fotos" aria-labelledby="s0">
             <header class="card-head">
               <span class="index">01</span>
+              <h2 id="s0">Fotos del vehículo</h2>
+              <span class="head-note photo-count">0 de 8</span>
+            </header>
+            <p class="hint photo-intro">La vista completa es obligatoria: identifica la unidad aunque haya dos modelos iguales.</p>
+            <div class="photo-grid"></div>
+          </section>
+
+          <section class="card" id="cliente" aria-labelledby="s1">
+            <header class="card-head">
+              <span class="index">02</span>
               <h2 id="s1">Cliente</h2>
             </header>
             <div class="grid grid-2">
@@ -176,15 +186,15 @@
                 <label for="telefono">Teléfono</label>
                 <input id="telefono" name="telefono" class="input mono" type="tel" inputmode="tel" autocomplete="tel" placeholder="10 dígitos" maxlength="16" required />
               </div>
-              <div class="grid-dt">
-                <div class="field">
-                  <label for="fecha">Fecha</label>
-                  <input id="fecha" name="fecha" class="input mono" type="date" required />
+              <div class="field">
+                <span class="label" id="lbl-stamp">Fecha y hora</span>
+                <div class="stamp" aria-labelledby="lbl-stamp" aria-describedby="stampHint">
+                  <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+                  <span class="mono" id="stampText">—</span>
                 </div>
-                <div class="field">
-                  <label for="hora">Hora</label>
-                  <input id="hora" name="hora" class="input mono" type="time" required />
-                </div>
+                <input id="fecha" name="fecha" type="hidden" />
+                <input id="hora" name="hora" type="hidden" />
+                <span class="hint" id="stampHint">Automática: se registra al enviar la orden.</span>
               </div>
             </div>
           </section>
@@ -192,7 +202,7 @@
           <!-- 02 Vehículo -->
           <section class="card" aria-labelledby="s2">
             <header class="card-head">
-              <span class="index">02</span>
+              <span class="index">03</span>
               <h2 id="s2">Datos del vehículo</h2>
             </header>
             <div class="grid grid-2">
@@ -223,7 +233,7 @@
           <!-- 03 Servicio -->
           <section class="card" aria-labelledby="s3">
             <header class="card-head">
-              <span class="index">03</span>
+              <span class="index">04</span>
               <h2 id="s3">Servicio y condición</h2>
             </header>
             <div class="grid">
@@ -242,7 +252,7 @@
           <!-- 04 Accesorios -->
           <section class="card" aria-labelledby="s4">
             <header class="card-head">
-              <span class="index">04</span>
+              <span class="index">05</span>
               <h2 id="s4">Accesorios recibidos</h2>
             </header>
             <div class="grid grid-3">
@@ -264,12 +274,12 @@
           <!-- 05 Presupuesto -->
           <section class="card" aria-labelledby="s5">
             <header class="card-head">
-              <span class="index">05</span>
+              <span class="index">06</span>
               <h2 id="s5">Presupuesto y pagos</h2>
             </header>
             <div class="grid grid-2">
               <div class="field span-2">
-                <label for="presupuesto">Costo del servicio</label>
+                <label for="presupuesto">Costo presupuesto</label>
                 <div class="money">
                   <span class="money-sign">$</span>
                   <input id="presupuesto" name="presupuesto" class="input mono" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00" />
@@ -313,7 +323,7 @@
           <!-- 06 Términos -->
           <section class="card" id="terminos" aria-labelledby="s6">
             <header class="card-head">
-              <span class="index">06</span>
+              <span class="index">07</span>
               <h2 id="s6">Términos y condiciones</h2>
             </header>
             <p class="terms-intro">Lee el contrato completo. La casilla se habilita al llegar al final.</p>
@@ -332,7 +342,7 @@
           <!-- 07 Firma -->
           <section class="card" id="firma" aria-labelledby="s7">
             <header class="card-head">
-              <span class="index">07</span>
+              <span class="index">08</span>
               <h2 id="s7">Firma del cliente</h2>
               <span class="head-note">Firma con el dedo o el mouse</span>
             </header>
@@ -373,6 +383,7 @@
             </div>
 
             <div class="receipt-body">
+              <div class="pv-photo" id="pvPhoto" hidden><img alt="Vista completa del vehículo" /><span class="pv-photo-n mono" id="pvPhotoN"></span></div>
               <div class="pair">
                 <div>
                   <span class="k">Cliente</span>
@@ -397,7 +408,7 @@
               <div class="rule"></div>
 
               <dl class="sums">
-                <div><dt>Costo del servicio</dt><dd class="mono" id="pvPresup">$0.00</dd></div>
+                <div><dt>Costo presupuesto</dt><dd class="mono" id="pvPresup">$0.00</dd></div>
                 <div><dt>Anticipo</dt><dd class="mono" id="pvAnticipo">$0.00</dd></div>
                 <div class="sum-total"><dt>Total a pagar</dt><dd class="mono" id="pvSaldo">$0.00</dd></div>
               </dl>
@@ -412,6 +423,7 @@
           <div class="checks" id="checks" aria-live="polite">
             <span class="k">Antes de enviar</span>
             <ul class="checklist">
+              <li data-check="fotos"><i></i>Foto de la vista completa</li>
               <li data-check="cliente"><i></i>Nombre y teléfono a 10 dígitos</li>
               <li data-check="vehiculo"><i></i>Marca y modelo del vehículo</li>
               <li data-check="servicio"><i></i>Descripción del servicio</li>
@@ -491,8 +503,8 @@
         <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.2 4.2L19 7"/></svg>
       </div>
       <h3 id="okTitle">Orden registrada</h3>
-      <p class="success-offline" id="okOffline" hidden>Sin señal: la orden y la firma quedaron guardadas en este teléfono. Se enviarán solas al volver la conexión y recibirán su folio.</p>
-      <p class="success-folio mono" id="okFolio">ZE-</p>
+      <p class="success-offline" id="okOffline" hidden>Sin señal: la orden y la firma quedaron guardadas en este teléfono. Se enviarán solas al volver la conexión y recibirán su folio; después envía la nota al cliente desde Historial.</p>
+      <p class="success-folio mono" id="okFolio">ZPEV-</p>
       <p class="success-text">Quedó guardada en la hoja del taller con la firma del cliente.</p>
       <div class="pay-block" id="payBlock" hidden>
         <div class="pay-row"><span>Anticipo a cobrar</span><span class="mono" id="payAmount">$0.00</span></div>
@@ -517,8 +529,43 @@
           <p class="pay-note">Aplazo sujeto a aprobación. Montos de $100 en adelante.</p>
         </section>
       </div>
-      <a class="ghost wa-btn" id="okWa" target="_blank" rel="noopener">Enviar comprobante por WhatsApp</a>
+      <div class="note-actions" id="okNoteActions">
+        <button type="button" class="note-share" id="okNoteShare">
+          <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3M8 7l4-4 4 4"/><path d="M5 11v9h14v-9"/></svg>
+          Enviar nota al cliente
+        </button>
+        <button type="button" class="ghost" id="okNoteView">Ver nota</button>
+        <button type="button" class="ghost" id="okNotePdf">PDF</button>
+        <button type="button" class="ghost" id="okTag" title="Etiqueta para pegar en el vehículo">Etiqueta</button>
+      </div>
+      <a class="link-btn wa-text" id="okWa" target="_blank" rel="noopener">Solo mensaje de WhatsApp, sin archivo</a>
       <button type="button" class="cta" id="newBtn"><span class="cta-label">Capturar otra orden</span></button>
+    </div>
+  </div>
+
+  <!-- Nota de servicio (vista y envío) -->
+  <div class="overlay note-overlay" id="noteView" hidden>
+    <div class="note-card" role="dialog" aria-modal="true" aria-labelledby="noteTitle">
+      <header class="note-head">
+        <div>
+          <span class="note-kicker">Nota de servicio</span>
+          <h3 id="noteTitle" class="mono">—</h3>
+        </div>
+        <button type="button" class="note-close" id="noteClose" aria-label="Cerrar">
+          <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </header>
+      <div class="note-body" id="noteBody"><p class="note-loading">Preparando la nota…</p></div>
+      <footer class="note-foot">
+        <button type="button" class="note-share" id="noteShare" disabled>
+          <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3M8 7l4-4 4 4"/><path d="M5 11v9h14v-9"/></svg>
+          Enviar al cliente
+        </button>
+        <button type="button" class="ghost" id="notePdf" disabled>PDF</button>
+        <button type="button" class="ghost" id="notePng" disabled>Imagen</button>
+        <button type="button" class="ghost" id="noteTag" disabled title="Etiqueta para pegar en el vehículo">Etiqueta</button>
+        <a class="ghost" id="notePhotos" target="_blank" rel="noopener" hidden>Fotos</a>
+      </footer>
     </div>
   </div>
 
@@ -526,7 +573,7 @@
   <div class="overlay" id="payDlg" hidden>
     <form class="success-card pay-card" id="payForm" role="dialog" aria-modal="true" aria-labelledby="payTitle" novalidate>
       <h3 id="payTitle">Registrar pago</h3>
-      <p class="success-folio mono" id="pdFolio">ZE-</p>
+      <p class="success-folio mono" id="pdFolio">ZPEV-</p>
       <dl class="pd-sums">
         <div><dt>Costo</dt><dd class="mono" id="pdTotal">$0.00</dd></div>
         <div><dt>Pagado</dt><dd class="mono" id="pdPaid">$0.00</dd></div>
@@ -564,7 +611,7 @@
   <div class="overlay" id="doneDlg" hidden>
     <div class="success-card pay-card" role="dialog" aria-modal="true" aria-labelledby="doneTitle">
       <h3 id="doneTitle">Concluir y entregar</h3>
-      <p class="success-folio mono" id="dnFolio">ZE-</p>
+      <p class="success-folio mono" id="dnFolio">ZPEV-</p>
       <dl class="pd-sums">
         <div><dt>Costo</dt><dd class="mono" id="dnTotal">$0.00</dd></div>
         <div><dt>Pagado</dt><dd class="mono" id="dnPaid">$0.00</dd></div>
@@ -582,7 +629,7 @@
   <div class="overlay" id="delDlg" hidden>
     <form class="success-card pay-card" id="delForm" role="dialog" aria-modal="true" aria-labelledby="delTitle" novalidate>
       <h3 id="delTitle">Eliminar orden</h3>
-      <p class="success-folio mono" id="delFolio">ZE-</p>
+      <p class="success-folio mono" id="delFolio">ZPEV-</p>
       <p class="success-text" id="delInfo"></p>
       <p class="success-text">La orden sale del historial y se archiva en la hoja «Órdenes eliminadas» con tu nombre, la fecha y el motivo. El folio no se vuelve a usar.</p>
       <div class="field">
@@ -605,7 +652,7 @@
       <span>Historial</span>
     </button>
     <button type="submit" form="orderForm" class="dock-cta" id="dockCta" disabled>
-      <span class="dock-progress mono" id="dockProgress">0/6</span>
+      <span class="dock-progress mono" id="dockProgress">0/7</span>
       <span class="dock-label" id="dockLabel">Completa la orden</span>
     </button>
   </nav>

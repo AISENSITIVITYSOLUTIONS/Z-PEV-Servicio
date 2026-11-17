@@ -27,7 +27,7 @@ acento lima `#D9F84A`, vista previa tipo comprobante).
 | Pieza | Dónde | Función |
 |---|---|---|
 | Frontend | Vite + JS + three.js → Firebase Hosting | Formulario, firma, historial |
-| Registro | Google Apps Script + Sheets + Drive | Folio `ZE-AAAAMMDD-NNNN`, filas, firmas |
+| Registro | Google Apps Script + Sheets + Drive | Folio `ZPEV-AA-NNNN` (consecutivo por año), filas, firmas |
 | Cobros | Firebase Function `billing` (Node 22) | Mercado Pago (Checkout Pro), oculto |
 | Pago a plazos | Firebase Function `aplazo` (Node 22) | Aplazo (Online API) y su webhook |
 | Conciliación | Firebase Function `aplazoSweep` (cada 60 min) | Pagos de Aplazo sin webhook y links vencidos |
@@ -94,3 +94,23 @@ Con cobros activos: `firebase deploy --only functions:billing,hosting` (ver `doc
 - Cada orden lleva un **ID de captura**; si un envío llegó pero la respuesta se perdió, el reintento devuelve el
   mismo folio y no se duplica la fila.
 - La hoja suma las columnas **ID de captura** y **Capturado en (dispositivo)** automáticamente.
+
+## Fotos del vehículo
+
+- Primera sección de la orden: **Vista completa** (obligatoria), Frente/manubrio, N° de serie, Golpes o detalles
+  y hasta 4 fotos extra (máximo 8). Abre la cámara trasera del teléfono.
+- Cada foto se reduce en el teléfono (1600 px, JPEG ≈ 0.72; unos 100–350 KB) antes de enviarse.
+- La vista completa viaja con la orden; las demás se suben una por una. Si se cae la señal, se reanudan desde la
+  cola sin repetir la orden ni duplicar fotos.
+- Drive: `Firmas/Fotos/<folio>/<folio>-<toma>.jpg`. La hoja guarda **Foto principal**, **Fotos (carpeta)** y **N.º de fotos**;
+  el historial muestra la miniatura de la unidad.
+
+## Nota de servicio para el cliente
+
+Al registrar una orden aparece **Enviar nota al cliente**: genera una imagen (PNG) con folio, fecha, hora, cliente, teléfono, vehículo, foto principal, servicio, costos y firma, y abre la hoja de compartir del teléfono (WhatsApp, correo…). El botón **PDF** genera la misma nota en PDF. Si el navegador no puede compartir archivos, la nota se descarga.
+
+En **Historial**, el ícono de documento (o el folio) abre la nota de cualquier orden, incluidas las que se guardaron sin conexión, con los datos de la hoja (acción `detail` del Apps Script, que devuelve la firma y la foto en base64).
+
+## Etiqueta interna con QR
+
+El botón **Etiqueta** (en la confirmación y en la nota del Historial) imprime una etiqueta de 100 × 70 mm para pegar en el vehículo. Lleva el folio grande, la foto, el cliente, el vehículo, el servicio, la fecha y un QR. El QR abre la app en `/?folio=ZPEV-26-0001`, que muestra la nota de esa orden; para verla hay que tener sesión iniciada. Funciona con impresoras de etiquetas o con hoja normal.

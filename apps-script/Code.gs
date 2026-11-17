@@ -39,16 +39,19 @@ const TZ = 'America/Mexico_City';
 const HEADERS = [
   'Folio', 'Registrado', 'Fecha de orden', 'Hora', 'Cliente', 'Teléfono', 'Marca y modelo', 'N° de serie',
   'Descripción del servicio', 'Características generales', 'Encendido',
-  'Presupuesto aprox. (MXN)', 'Anticipo (MXN)', 'Total (MXN)', 'Saldo pendiente (MXN)',
+  'Costo presupuesto (MXN)', 'Anticipo (MXN)', 'Total (MXN)', 'Saldo pendiente (MXN)',
   'Llaves o NFC', 'Cargador', 'Otros accesorios',
   'Términos aceptados', 'Versión de términos', 'Firma (enlace)', 'Estatus', 'Capturado por',
   'Pago anticipo', 'Referencia de pago',
   'ID de captura', 'Capturado en (dispositivo)',
   'Método de pago', 'Aplazo cartId', 'Aplazo loanId', 'Aplazo link', 'Aplazo monto', 'Aplazo estado',
   'Aplazo actualizado', 'Aplazo reembolsado', 'Aplazo generado por',
-  'Plan de pago', 'Abonos (MXN)', 'Liberada por', 'Liberada el', 'Comprobante de entrega'
+  'Plan de pago', 'Abonos (MXN)', 'Liberada por', 'Liberada el', 'Comprobante de entrega',
+  'Foto principal', 'Fotos (carpeta)', 'N.º de fotos'
 ];
 const DELETED_SHEET = 'Órdenes eliminadas';
+// Folio actual ZPEV-26-0001; se siguen aceptando los anteriores ZE-0001 y ZE-AAAAMMDD-0001.
+const FOLIO_RE = /^(?:ZPEV-\d{2}-\d{4,}|ZE-(?:\d{8}-)?\d{4,})$/;
 const DEFAULT_ADMINS = ['fdealbam@nni.ai', 'fdealbam@gmail.com', 'estebans690@gmail.com'];
 const PAYMENTS_SHEET = 'Pagos';
 const PAYMENT_HEADERS = ['Folio', 'Fecha', 'Tipo', 'Monto (MXN)', 'Método', 'Nota', 'Registrado por', 'Saldo después (MXN)'];
@@ -104,6 +107,11 @@ function doPost(e) {
       if (action === 'setPlan') return json_(setPlan_(sheet, data));
       return json_(completeOrder_(sheet, data, email));
     }
+    if (action === 'detail') return json_(orderDetail_(sheet, data));
+    if (action === 'photo') {
+      lock.waitLock(20000);
+      return json_(addPhoto_(sheet, data, props));
+    }
     if (action !== 'create') return json_({ ok: false, error: 'Acción no reconocida.' });
 
     const problem = validate_(data);
@@ -130,7 +138,7 @@ function doPost(e) {
     set('Descripción del servicio', clip_(data.servicio, 2000));
     set('Características generales', clip_(data.caracteristicas, 2000));
     set('Encendido', data.encendido === 'Sí' ? 'Sí' : 'No');
-    set('Presupuesto aprox. (MXN)', num_(data.presupuesto));
+    set('Costo presupuesto (MXN)', num_(data.presupuesto));
     set('Anticipo (MXN)', num_(data.anticipo));
     set('Total (MXN)', num_(data.total));
     set('Saldo pendiente (MXN)', Math.max(num_(data.total) - num_(data.anticipo), 0));
@@ -147,6 +155,12 @@ function doPost(e) {
     set('Capturado en (dispositivo)', data.capturadoEn ? new Date(data.capturadoEn) : '');
     set('Plan de pago', PLANS.indexOf(data.plan) >= 0 ? data.plan : PLANS[0]);
     set('Abonos (MXN)', 0);
+    if (isJpeg_(data.fotoPrincipal)) {
+      const f = savePhoto_(props.getProperty('DRIVE_FOLDER_ID'), folio, 'vista', 'Vista completa', data.fotoPrincipal);
+      set('Foto principal', f.url);
+      set('Fotos (carpeta)', f.folderUrl);
+      set('N.º de fotos', 1);
+    }
     sheet.appendRow(row);
     SpreadsheetApp.flush();
 
@@ -183,18 +197,21 @@ function listOrders_(sheet, limit) {
       abonos: num_(r[COL['Abonos (MXN)']]),
       comprobanteUrl: r[COL['Comprobante de entrega']] || '',
       receiptUrl: r[COL['Estatus']] === 'Completada' ? receiptUrl_(r[COL['Folio']]) : '',
-      entregada: fmtDate_(r[COL['Liberada el']])
+      entregada: fmtDate_(r[COL['Liberada el']]),
+      fotoId: driveId_(r[COL['Foto principal']]),
+      fotosUrl: r[COL['Fotos (carpeta)']] || '',
+      fotos: num_(r[COL['N.º de fotos']])
     };
   });
   return { ok: true, orders: orders, monthCount: monthCount_(sheet) };
 }
 
 function monthCount_(sheet) {
-  const prefix = 'ZE-' + Utilities.formatDate(new Date(), TZ, 'yyyyMM');
+  const month = Utilities.formatDate(new Date(), TZ, 'yyyyMM');
   const last = sheet.getLastRow();
   if (last < 2) return 0;
-  return sheet.getRange(2, 1, last - 1, 1).getValues().filter(function (r) {
-    return String(r[0]).indexOf(prefix) === 0;
+  return sheet.getRange(2, COL['Registrado'] + 1, last - 1, 1).getValues().filter(function (r) {
+    return r[0] instanceof Date && Utilities.formatDate(r[0], TZ, 'yyyyMM') === month;
   }).length;
 }
 
@@ -330,7 +347,7 @@ function receiptUrl_(folio) {
 /** Datos mínimos para la página del cliente: sin teléfono completo ni correos del personal. */
 function publicReceipt_(q) {
   const folio = String(q.f || '');
-  if (!/^ZE-\d{8}-\d{4}$/.test(folio)) return { ok: false, error: 'Comprobante no válido.' };
+  if (!FOLIO_RE.test(folio)) return { ok: false, error: 'Comprobante no válido.' };
   const expected = receiptToken_(folio);
   const got = String(q.t || '');
   let diff = expected.length ^ got.length;
@@ -479,7 +496,7 @@ function deliveryReceipt_(sheet, r, folderId) {
       '</table></div>' +
       '<div class="card"><div class="eyebrow" style="margin-bottom:8px">Pagos recibidos</div><table>' +
         '<tr class="h"><th>Concepto</th><th>Fecha</th><th>Método</th><th style="text-align:right">Monto</th></tr>' + tr +
-        '<tr class="tot"><td class="c" colspan="3">Costo del servicio</td><td class="c n">' + money_(total) + '</td></tr>' +
+        '<tr class="tot"><td class="c" colspan="3">Costo presupuesto</td><td class="c n">' + money_(total) + '</td></tr>' +
         '<tr class="tot"><td class="c" colspan="3">Total pagado</td><td class="c n">' + money_(pagado) + '</td></tr>' +
         '<tr class="grand"><td colspan="3">Saldo pendiente</td><td class="n">' + money_(Math.max(total - pagado, 0)) + '</td></tr>' +
       '</table></div>' +
@@ -709,10 +726,10 @@ function getSheet_(sheetId) {
     sheet.setFrozenRows(1);
     sheet.getRange(1, 1, 1, HEADERS.length).setFontWeight('bold').setBackground('#0F1115').setFontColor('#D9F84A');
     sheet.getRange(2, COL['Registrado'] + 1, sheet.getMaxRows() - 1, 1).setNumberFormat('dd/mm/yyyy hh:mm');
-    sheet.getRange(2, COL['Presupuesto aprox. (MXN)'] + 1, sheet.getMaxRows() - 1, 4).setNumberFormat('$#,##0.00');
+    sheet.getRange(2, COL['Costo presupuesto (MXN)'] + 1, sheet.getMaxRows() - 1, 4).setNumberFormat('$#,##0.00');
     const rule = SpreadsheetApp.newDataValidation().requireValueInList(STATUS_OPTIONS, true).setAllowInvalid(false).build();
     sheet.getRange(2, COL['Estatus'] + 1, sheet.getMaxRows() - 1, 1).setDataValidation(rule);
-  } else if (sheet.getLastColumn() < HEADERS.length || sheet.getRange(1, HEADERS.length).getValue() !== HEADERS[HEADERS.length - 1]) {
+  } else if (ensureColumns_(sheet) && sheet.getRange(1, 1, 1, HEADERS.length).getValues()[0].join('|') !== HEADERS.join('|')) {
     // Migración: hojas creadas con una versión anterior reciben las columnas nuevas.
     sheet.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS])
       .setFontWeight('bold').setBackground('#0F1115').setFontColor('#D9F84A');
@@ -728,21 +745,151 @@ function getSheet_(sheetId) {
   return sheet;
 }
 
+function ensureColumns_(sheet) {
+  const missing = HEADERS.length - sheet.getMaxColumns();
+  if (missing > 0) sheet.insertColumnsAfter(sheet.getMaxColumns(), missing);
+  return true;
+}
+
+/**
+ * Folio consecutivo por año: ZPEV-26-0001, ZPEV-26-0002… y en 2027 empieza en ZPEV-27-0001.
+ * El contador vive en la propiedad FOLIO_SEQ_<AA>. Si falta, se reconstruye con el mayor folio
+ * ZPEV del año en la hoja y en «Órdenes eliminadas», así nunca se repite. Se llama con el candado tomado.
+ */
 function nextFolio_(sheet) {
-  const today = Utilities.formatDate(new Date(), TZ, 'yyyyMMdd');
-  const prefix = 'ZE-' + today + '-';
-  let seq = 0;
-  // También revisa las órdenes eliminadas: un folio nunca se reutiliza.
-  [sheet, sheet.getParent().getSheetByName(DELETED_SHEET)].forEach(function (sh) {
-    if (!sh) return;
-    const last = sh.getLastRow();
-    if (last < 2) return;
-    sh.getRange(2, 1, last - 1, 1).getValues().forEach(function (r) {
-      const f = String(r[0]);
-      if (f.indexOf(prefix) === 0) seq = Math.max(seq, parseInt(f.slice(prefix.length), 10) || 0);
+  const props = PropertiesService.getScriptProperties();
+  const yy = Utilities.formatDate(new Date(), TZ, 'yy');
+  const key = 'FOLIO_SEQ_' + yy;
+  let seq = parseInt(props.getProperty(key), 10);
+  if (!(seq >= 0)) {
+    seq = 0;
+    const re = new RegExp('^ZPEV-' + yy + '-(\\d+)$');
+    [sheet, sheet.getParent().getSheetByName(DELETED_SHEET)].forEach(function (sh) {
+      if (!sh) return;
+      const last = sh.getLastRow();
+      if (last < 2) return;
+      sh.getRange(2, 1, last - 1, 1).getValues().forEach(function (r) {
+        const m = String(r[0]).match(re);
+        if (m) seq = Math.max(seq, parseInt(m[1], 10));
+      });
     });
-  });
-  return prefix + ('000' + (seq + 1)).slice(-4);
+  }
+  seq += 1;
+  props.setProperty(key, String(seq));
+  return 'ZPEV-' + yy + '-' + ('000' + seq).slice(-Math.max(4, String(seq).length));
+}
+
+/* ---------- Nota de servicio ---------- */
+
+function driveDataUrl_(url, mime) {
+  const id = driveId_(url);
+  if (!id) return '';
+  try {
+    const blob = DriveApp.getFileById(id).getBlob();
+    return 'data:' + (mime || blob.getContentType()) + ';base64,' + Utilities.base64Encode(blob.getBytes());
+  } catch (err) {
+    return '';
+  }
+}
+
+/** Datos completos de una orden para la nota de servicio (incluye firma y foto principal). */
+function orderDetail_(sheet, data) {
+  const r = orderRow_(sheet, data.folio);
+  if (!r) return { ok: false, error: 'Folio no encontrado.' };
+  const v = sheet.getRange(r, 1, 1, HEADERS.length).getValues()[0];
+  const g = function (h) { return v[COL[h]]; };
+  const fecha = g('Fecha de orden');
+  const hora = g('Hora');
+  return {
+    ok: true,
+    order: {
+      folio: g('Folio'),
+      fecha: fecha instanceof Date ? Utilities.formatDate(fecha, TZ, 'yyyy-MM-dd') : String(fecha || ''),
+      hora: hora instanceof Date ? Utilities.formatDate(hora, TZ, 'HH:mm') : String(hora || '').slice(0, 5),
+      nombre: g('Cliente'),
+      telefono: String(g('Teléfono')).replace(/^'/, ''),
+      marca: g('Marca y modelo'),
+      serie: g('N° de serie'),
+      encendido: g('Encendido'),
+      servicio: g('Descripción del servicio'),
+      caracteristicas: g('Características generales'),
+      llaves: g('Llaves o NFC'),
+      cargador: g('Cargador'),
+      otros: g('Otros accesorios'),
+      presupuesto: num_(g('Costo presupuesto (MXN)')),
+      anticipo: num_(g('Anticipo (MXN)')),
+      total: num_(g('Total (MXN)')),
+      saldo: num_(g('Saldo pendiente (MXN)')),
+      estatus: g('Estatus'),
+      fotos: num_(g('N.º de fotos')),
+      fotosUrl: g('Fotos (carpeta)') || '',
+      firmaUrl: driveDataUrl_(g('Firma (enlace)'), 'image/png'),
+      fotoUrl: driveDataUrl_(g('Foto principal'), 'image/jpeg')
+    }
+  };
+}
+
+/* ---------- Fotos del vehículo ---------- */
+
+const MAX_PHOTO_CHARS = 4 * 1024 * 1024; // ≈3 MB de JPEG en base64
+
+function isJpeg_(dataUrl) {
+  return typeof dataUrl === 'string' && dataUrl.indexOf('data:image/jpeg;base64,') === 0 && dataUrl.length < MAX_PHOTO_CHARS;
+}
+
+function driveId_(url) {
+  const m = String(url || '').match(/[-\w]{25,}/);
+  return m ? m[0] : '';
+}
+
+/** Carpeta Fotos/<folio> dentro de la carpeta de firmas. */
+function photoFolder_(rootId, folio) {
+  const root = DriveApp.getFolderById(rootId);
+  const it = root.getFoldersByName('Fotos');
+  const fotos = it.hasNext() ? it.next() : root.createFolder('Fotos');
+  const f = fotos.getFoldersByName(folio);
+  if (f.hasNext()) return f.next();
+  const folder = fotos.createFolder(folio);
+  folder.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  return folder;
+}
+
+/** Guarda una foto como <folio>-<slot>.jpg; si ya existe (reintento) no la duplica. */
+function savePhoto_(rootId, folio, slot, label, dataUrl) {
+  const folder = photoFolder_(rootId, folio);
+  const safeSlot = String(slot).replace(/[^a-z0-9-]/gi, '').slice(0, 20) || 'foto';
+  const name = folio + '-' + safeSlot + '.jpg';
+  const existing = folder.getFilesByName(name);
+  let file;
+  if (existing.hasNext()) {
+    file = existing.next();
+  } else {
+    const blob = Utilities.newBlob(Utilities.base64Decode(dataUrl.split(',')[1]), 'image/jpeg', name);
+    file = folder.createFile(blob);
+    file.setDescription(clip_(label, 80));
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  }
+  let count = 0;
+  const all = folder.getFiles();
+  while (all.hasNext()) { all.next(); count += 1; }
+  return { url: file.getUrl(), folderUrl: folder.getUrl(), count: count };
+}
+
+/** Acción photo: agrega una foto a una orden existente. Solo desde el mismo equipo que la capturó. */
+function addPhoto_(sheet, data, props) {
+  if (!FOLIO_RE.test(String(data.folio || ''))) return { ok: false, error: 'Folio inválido.' };
+  if (!isJpeg_(data.dataUrl)) return { ok: false, error: 'La foto no es válida o es demasiado grande.' };
+  const r = orderRow_(sheet, data.folio);
+  if (!r) return { ok: false, error: 'Folio no encontrado.' };
+  const capturedId = sheet.getRange(r, COL['ID de captura'] + 1).getValue();
+  if (capturedId && data.clientId !== capturedId) return { ok: false, error: 'La foto no corresponde a esta orden.' };
+  const f = savePhoto_(props.getProperty('DRIVE_FOLDER_ID'), data.folio, data.slot, data.label, data.dataUrl);
+  if (data.slot === 'vista' || !sheet.getRange(r, COL['Foto principal'] + 1).getValue()) {
+    sheet.getRange(r, COL['Foto principal'] + 1).setValue(f.url);
+  }
+  sheet.getRange(r, COL['Fotos (carpeta)'] + 1).setValue(f.folderUrl);
+  sheet.getRange(r, COL['N.º de fotos'] + 1).setValue(f.count);
+  return { ok: true, folio: data.folio, fotos: f.count };
 }
 
 function saveSignature_(folderId, folio, dataUrl) {
