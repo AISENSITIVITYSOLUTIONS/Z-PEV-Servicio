@@ -151,11 +151,14 @@ export function mountHero(canvas) {
   });
   io.observe(canvas);
 
+  // Pausa explícita (p. ej. con la confirmación encima) para liberar GPU y memoria
+  let paused = false;
+
   let raf = 0;
   const clock = new THREE.Clock();
   const tick = () => {
     raf = requestAnimationFrame(tick);
-    if (!visible) return;
+    if (!visible || paused || document.hidden) return;
     const t = clock.getElapsedTime();
     const idle = reduceMotion ? 0 : Math.sin(t * 0.7) * 0.08;
     current.x += (target.x + idle * 0.4 - current.x) * 0.06;
@@ -168,6 +171,8 @@ export function mountHero(canvas) {
   tick();
 
   return {
+    pause() { paused = true; },
+    resume() { paused = false; },
     destroy() {
       cancelAnimationFrame(raf);
       ro.disconnect();

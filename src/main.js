@@ -707,6 +707,7 @@ function enterApp(user) {
   requestAnimationFrame(checkTermsRead);
   if (!heroMounted) heroMounted = mountHero($('#hero3d'));
   renderPending();
+  restoreSuccess();
 }
 
 function showApp(s) {
@@ -1071,7 +1072,8 @@ async function sendNote(kind = 'png') {
   if (!noteCurrent) return;
   const { data, canvas } = noteCurrent;
   try {
-    const blob = kind === 'pdf' ? await noteToPdf(canvas, data) : await canvasToBlob(canvas, 'image/png');
+    // El PNG ya viene preparado: navigator.share se llama dentro del mismo toque del usuario.
+    const blob = kind === 'pdf' ? await noteToPdf(canvas, data) : (noteCurrent.png || await canvasToBlob(canvas, 'image/png'));
     const r = await shareNote(blob, noteFileName(data, kind), noteText(data));
     if (r === 'downloaded') toast(kind === 'pdf' ? 'PDF descargado. Adjúntalo en WhatsApp o correo.' : 'Imagen descargada. Adjúntala en WhatsApp.', 'ok');
   } catch (err) {
@@ -1099,12 +1101,27 @@ $('#noteTag').addEventListener('click', () => noteCurrent && printOrderTag(noteC
 $('#okTag').addEventListener('click', () => noteSource && printOrderTag(noteSource));
 
 // Desde la confirmación: la nota se arma con la foto y firma que ya están en el teléfono.
+// Se prepara en cuanto aparece la confirmación para compartir al instante (sin perder el gesto).
+let notePrep = null;
+function prepareSuccessNote() {
+  if (!noteSource) { notePrep = null; return; }
+  const src = noteSource;
+  notePrep = renderNote(src)
+    .then(async (canvas) => ({ data: src, canvas, png: await canvasToBlob(canvas, 'image/png') }))
+    .catch(() => null);
+}
+
 async function noteFromSuccess(kind) {
   if (!noteSource) return;
   if (kind === 'view') return openNote(noteSource);
   try {
-    const canvas = await renderNote(noteSource);
-    noteCurrent = { data: noteSource, canvas };
+    let prep = notePrep ? await notePrep : null;
+    if (!prep || prep.data !== noteSource) {
+      const canvas = await renderNote(noteSource);
+      prep = { data: noteSource, canvas, png: await canvasToBlob(canvas, 'image/png') };
+      notePrep = Promise.resolve(prep);
+    }
+    noteCurrent = prep;
     await sendNote(kind);
   } catch (err) {
     toast(`No se pudo preparar la nota: ${err.message}`, 'error');
@@ -1149,6 +1166,57 @@ function showSuccess(o, { offline = false } = {}) {
   overlay.hidden = false;
   requestAnimationFrame(() => overlay.classList.add('is-in'));
   $('#newBtn').focus();
+  heroMounted?.pause();
+  prepareSuccessNote();
+  if (!offline && !restoring) persistSuccess(o);
+}
+
+// ----- Confirmación persistente -----
+// Al compartir la nota a WhatsApp la app pasa a segundo plano y Android puede cerrarla para
+// liberar memoria. Se guarda la última confirmación para reabrirla al volver.
+const SUCCESS_KEY = 'zpev.ultimaConfirmacion';
+const SUCCESS_TTL = 2 * 60 * 60 * 1000;
+let restoring = false;
+
+function shrinkImage(dataUrl, maxW = 1080, quality = 0.78) {
+  return new Promise((resolve) => {
+    if (!dataUrl) return resolve('');
+    const img = new Image();
+    img.onload = () => {
+      const s = Math.min(1, maxW / img.width);
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * s);
+      c.height = Math.round(img.height * s);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      resolve(c.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = () => resolve('');
+    img.src = dataUrl;
+  });
+}
+
+async function persistSuccess(o) {
+  try {
+    const { fotos, ...rest } = o;
+    const saved = { ...rest, fotosCount: fotos?.length || 0, fotoPrincipal: await shrinkImage(o.fotoPrincipal) };
+    localStorage.setItem(SUCCESS_KEY, JSON.stringify({ at: Date.now(), order: saved }));
+  } catch (_) { /* almacenamiento lleno o bloqueado: no es crítico */ }
+}
+
+function clearSuccess() {
+  try { localStorage.removeItem(SUCCESS_KEY); } catch (_) { /* noop */ }
+}
+
+function restoreSuccess() {
+  if (!overlay.hidden) return;
+  let rec = null;
+  try { rec = JSON.parse(localStorage.getItem(SUCCESS_KEY) || 'null'); } catch (_) { rec = null; }
+  if (!rec?.order?.folio) return;
+  if (Date.now() - rec.at > SUCCESS_TTL) return clearSuccess();
+  const o = { ...rec.order, fotos: Array.from({ length: rec.order.fotosCount || 0 }) };
+  lastOrder = o;
+  restoring = true;
+  try { showSuccess(o); } finally { restoring = false; }
 }
 
 $('#payBtn').addEventListener('click', async () => {
@@ -1242,6 +1310,9 @@ $('#bnplCancel').addEventListener('click', async () => {
 $('#newBtn').addEventListener('click', () => {
   overlay.classList.remove('is-in');
   overlay.hidden = true;
+  clearSuccess();
+  notePrep = null;
+  heroMounted?.resume();
   resetForm();
 });
 
