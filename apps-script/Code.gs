@@ -47,7 +47,7 @@ const HEADERS = [
   'Método de pago', 'Aplazo cartId', 'Aplazo loanId', 'Aplazo link', 'Aplazo monto', 'Aplazo estado',
   'Aplazo actualizado', 'Aplazo reembolsado', 'Aplazo generado por',
   'Plan de pago', 'Abonos (MXN)', 'Liberada por', 'Liberada el', 'Comprobante de entrega',
-  'Foto principal', 'Fotos (carpeta)', 'N.º de fotos'
+  'Foto principal', 'Fotos (carpeta)', 'N.º de fotos', 'Requiere factura', 'IVA (MXN)'
 ];
 const DELETED_SHEET = 'Órdenes eliminadas';
 // Folio actual ZPEV-26-0001; se siguen aceptando los anteriores ZE-0001 y ZE-AAAAMMDD-0001.
@@ -57,6 +57,15 @@ const PAYMENTS_SHEET = 'Pagos';
 const PAYMENT_HEADERS = ['Folio', 'Fecha', 'Tipo', 'Monto (MXN)', 'Método', 'Nota', 'Registrado por', 'Saldo después (MXN)'];
 const PAYMENT_METHODS = ['Efectivo', 'Tarjeta', 'Transferencia', 'Aplazo', 'Mercado Pago', 'Otro'];
 const PLANS = ['Anticipo y liquidación', 'Varios pagos'];
+// El «Costo presupuesto» es solo informativo (cotización aproximada) y no entra en ninguna suma.
+// Total a pagar = Anticipo + IVA (16 % solo si el cliente requiere factura). Saldo = Total − pagos registrados.
+const IVA_RATE = 0.16;
+const r2_ = function (n) { return Math.round(n * 100) / 100; };
+function totals_(anticipo, factura) {
+  const a = r2_(Math.max(num_(anticipo), 0));
+  const iva = factura ? r2_(a * IVA_RATE) : 0;
+  return { anticipo: a, iva: iva, total: r2_(a + iva) };
+}
 const APLAZO_FIELDS = {
   cartId: 'Aplazo cartId', loanId: 'Aplazo loanId', url: 'Aplazo link', monto: 'Aplazo monto',
   estado: 'Aplazo estado', actualizado: 'Aplazo actualizado', reembolsado: 'Aplazo reembolsado', por: 'Aplazo generado por'
@@ -95,6 +104,11 @@ function doPost(e) {
     }
 
     const sheet = getSheet_(props.getProperty('SHEET_ID'));
+    if (!props.getProperty('COBRO_V2')) {
+      lock.waitLock(20000);
+      migrateCobros_(sheet, props);
+      lock.releaseLock();
+    }
     if (action === 'list') return json_(Object.assign(listOrders_(sheet, data.limit), { isAdmin: isAdmin_(email, props) }));
     if (action === 'deleteOrder') {
       if (!isAdmin_(email, props)) return json_({ ok: false, error: 'Solo un administrador puede eliminar órdenes.' });
@@ -142,9 +156,13 @@ function doPost(e) {
     set('Características generales', clip_(data.caracteristicas, 2000));
     set('Encendido', data.encendido === 'Sí' ? 'Sí' : 'No');
     set('Costo presupuesto (MXN)', num_(data.presupuesto));
-    set('Anticipo (MXN)', num_(data.anticipo));
-    set('Total (MXN)', num_(data.total));
-    set('Saldo pendiente (MXN)', Math.max(num_(data.total) - num_(data.anticipo), 0));
+    const factura = data.factura === 'Sí';
+    const t = totals_(data.anticipo, factura);
+    set('Anticipo (MXN)', t.anticipo);
+    set('Requiere factura', factura ? 'Sí' : 'No');
+    set('IVA (MXN)', t.iva);
+    set('Total (MXN)', t.total);
+    set('Saldo pendiente (MXN)', t.total);
     set('Llaves o NFC', clip_(data.llaves, 120));
     set('Cargador', clip_(data.cargador, 120));
     set('Otros accesorios', clip_(data.otros, 200));
@@ -167,7 +185,7 @@ function doPost(e) {
     sheet.appendRow(row);
     SpreadsheetApp.flush();
 
-    return json_({ ok: true, folio: folio, firmaUrl: firmaUrl, monthCount: monthCount_(sheet) });
+    return json_({ ok: true, folio: folio, firmaUrl: firmaUrl, total: t.total, iva: t.iva, monthCount: monthCount_(sheet) });
   } catch (err) {
     return json_({ ok: false, error: 'Error del servidor: ' + err.message });
   } finally {
@@ -190,7 +208,10 @@ function listOrders_(sheet, limit) {
       cliente: r[COL['Cliente']],
       telefono: String(r[COL['Teléfono']]).replace(/^'/, ''),
       marca: r[COL['Marca y modelo']],
+      presupuesto: num_(r[COL['Costo presupuesto (MXN)']]),
       anticipo: num_(r[COL['Anticipo (MXN)']]),
+      factura: r[COL['Requiere factura']] || '',
+      iva: num_(r[COL['IVA (MXN)']]),
       total: num_(r[COL['Total (MXN)']]),
       saldo: num_(r[COL['Saldo pendiente (MXN)']]),
       estatus: r[COL['Estatus']],
@@ -291,14 +312,14 @@ function orderSummary_(sheet, r) {
   };
 }
 
-/** Abono o liquidación. Saldo = Total − Anticipo − Abonos. Con saldo cero, Estatus = Pagada. */
+/** Pago (anticipo, abono o liquidación). Saldo = Total − pagos registrados. Con saldo cero, Estatus = Pagada. */
 function addPayment_(sheet, data, email) {
   const r = orderRow_(sheet, data.folio);
   if (!r) return { ok: false, error: 'Folio no encontrado.' };
   const o = orderSummary_(sheet, r);
   if (o.estatus === 'Completada') return { ok: false, error: 'La orden ya está completada y liberada.' };
   const monto = num_(data.monto);
-  const saldo = Math.max(Math.round((o.total - o.anticipo - o.abonos) * 100) / 100, 0);
+  const saldo = Math.max(r2_(o.total - o.abonos), 0);
   if (saldo <= 0) return { ok: false, error: 'Esta orden no tiene saldo pendiente.' };
   if (!(monto > 0)) return { ok: false, error: 'Indica el monto del pago.' };
   if (monto > saldo) return { ok: false, error: 'El pago supera el saldo pendiente (' + saldo.toFixed(2) + ' MXN).' };
@@ -308,7 +329,8 @@ function addPayment_(sheet, data, email) {
   const metodo = PAYMENT_METHODS.indexOf(data.metodo) >= 0 ? data.metodo : 'Otro';
   const nuevoSaldo = Math.round((saldo - monto) * 100) / 100;
   const abonos = Math.round((o.abonos + monto) * 100) / 100;
-  paymentsSheet_(sheet).appendRow([o.folio, new Date(), nuevoSaldo === 0 ? 'Liquidación' : 'Abono', monto, metodo,
+  const tipo = o.abonos === 0 && nuevoSaldo > 0 ? 'Anticipo' : nuevoSaldo === 0 ? 'Liquidación' : 'Abono';
+  paymentsSheet_(sheet).appendRow([o.folio, new Date(), tipo, monto, metodo,
     clip_(data.nota, 200), email, nuevoSaldo]);
   sheet.getRange(r, COL['Abonos (MXN)'] + 1).setValue(abonos);
   sheet.getRange(r, COL['Saldo pendiente (MXN)'] + 1).setValue(nuevoSaldo);
@@ -394,7 +416,7 @@ function publicReceipt_(q) {
   const total = num_(v[COL['Total (MXN)']]);
   const anticipo = num_(v[COL['Anticipo (MXN)']]);
   const pagos = [];
-  if (anticipo > 0) pagos.push({ concepto: 'Anticipo', fecha: fmtDateTime_(v[COL['Registrado']]), metodo: String(v[COL['Método de pago']] || ''), monto: anticipo });
+  if (anticipo > 0 && !v[COL['Requiere factura']]) pagos.push({ concepto: 'Anticipo', fecha: fmtDateTime_(v[COL['Registrado']]), metodo: String(v[COL['Método de pago']] || ''), monto: anticipo });
   paymentsOf_(sheet, folio).forEach(function (p) {
     pagos.push({ concepto: p.tipo, fecha: fmtDateTime_(p.fecha), metodo: p.metodo, monto: p.monto });
   });
@@ -469,7 +491,7 @@ function deliveryReceipt_(sheet, r, folderId) {
   const anticipo = num_(v[COL['Anticipo (MXN)']]);
   const pagos = paymentsOf_(sheet, folio);
   const filas = [];
-  if (anticipo > 0) {
+  if (anticipo > 0 && !v[COL['Requiere factura']]) {
     filas.push(['Anticipo', fmtDateTime_(v[COL['Registrado']]), String(v[COL['Método de pago']] || '—'), anticipo]);
   }
   pagos.forEach(function (p) { filas.push([p.tipo, fmtDateTime_(p.fecha), p.metodo, p.monto]); });
@@ -526,7 +548,8 @@ function deliveryReceipt_(sheet, r, folderId) {
       '</table></div>' +
       '<div class="card"><div class="eyebrow" style="margin-bottom:8px">Pagos recibidos</div><table>' +
         '<tr class="h"><th>Concepto</th><th>Fecha</th><th>Método</th><th style="text-align:right">Monto</th></tr>' + tr +
-        '<tr class="tot"><td class="c" colspan="3">Costo presupuesto</td><td class="c n">' + money_(total) + '</td></tr>' +
+        (num_(v[COL['IVA (MXN)']]) > 0 ? '<tr class="tot"><td class="c" colspan="3">IVA 16 % (factura)</td><td class="c n">' + money_(num_(v[COL['IVA (MXN)']])) + '</td></tr>' : '') +
+        '<tr class="tot"><td class="c" colspan="3">Total del servicio</td><td class="c n">' + money_(total) + '</td></tr>' +
         '<tr class="tot"><td class="c" colspan="3">Total pagado</td><td class="c n">' + money_(pagado) + '</td></tr>' +
         '<tr class="grand"><td colspan="3">Saldo pendiente</td><td class="n">' + money_(Math.max(total - pagado, 0)) + '</td></tr>' +
       '</table></div>' +
@@ -557,7 +580,18 @@ function recordPayment_(data, props) {
       const approved = data.status === 'approved';
       sheet.getRange(r, COL['Pago anticipo'] + 1).setValue(approved ? 'Pagado' : String(data.status || ''));
       sheet.getRange(r, COL['Referencia de pago'] + 1).setValue(String(data.paymentId || ''));
-      if (approved) sheet.getRange(r, COL['Estatus'] + 1).setValue('Anticipo pagado');
+      if (approved) {
+        sheet.getRange(r, COL['Estatus'] + 1).setValue('Anticipo pagado');
+        const v = sheet.getRange(r, 1, 1, HEADERS.length).getValues()[0];
+        if (v[COL['Requiere factura']]) {
+          const monto = num_(data.amount) || num_(v[COL['Total (MXN)']]);
+          const abonos = r2_(num_(v[COL['Abonos (MXN)']]) + monto);
+          const saldo = Math.max(r2_(num_(v[COL['Total (MXN)']]) - abonos), 0);
+          sheet.getRange(r, COL['Abonos (MXN)'] + 1).setValue(abonos);
+          sheet.getRange(r, COL['Saldo pendiente (MXN)'] + 1).setValue(saldo);
+          paymentsSheet_(sheet).appendRow([data.folio, new Date(), 'Anticipo', monto, String(data.method || 'En línea').slice(0, 40), String(data.paymentId || ''), 'sistema', saldo]);
+        }
+      }
       if (data.method) sheet.getRange(r, COL['Método de pago'] + 1).setValue(String(data.method).slice(0, 40));
       return { ok: true };
     }
@@ -768,6 +802,7 @@ function getSheet_(sheetId) {
     sheet.getRange(2, COL['Aplazo monto'] + 1, sheet.getMaxRows() - 1, 1).setNumberFormat('$#,##0.00');
     sheet.getRange(2, COL['Aplazo reembolsado'] + 1, sheet.getMaxRows() - 1, 1).setNumberFormat('$#,##0.00');
     sheet.getRange(2, COL['Abonos (MXN)'] + 1, sheet.getMaxRows() - 1, 1).setNumberFormat('$#,##0.00');
+    sheet.getRange(2, COL['IVA (MXN)'] + 1, sheet.getMaxRows() - 1, 1).setNumberFormat('$#,##0.00');
     sheet.getRange(2, COL['Liberada el'] + 1, sheet.getMaxRows() - 1, 1).setNumberFormat('dd/mm/yyyy hh:mm');
     const rule = SpreadsheetApp.newDataValidation().requireValueInList(STATUS_OPTIONS, true).setAllowInvalid(false).build();
     sheet.getRange(2, COL['Estatus'] + 1, sheet.getMaxRows() - 1, 1).setDataValidation(rule);
@@ -809,6 +844,46 @@ function nextFolio_(sheet) {
   return 'ZPEV-' + yy + '-' + ('000' + seq).slice(-Math.max(4, String(seq).length));
 }
 
+/* ---------- Migración única al nuevo esquema de cobro ---------- */
+
+/**
+ * Órdenes abiertas creadas antes del cambio: el presupuesto deja de ser el total.
+ * Total = Anticipo (sin factura), Saldo = Total − pagos registrados (un anticipo ya pagado en línea cuenta como pago).
+ * Las órdenes Pagadas o Completadas no se tocan. Se ejecuta una sola vez (propiedad COBRO_V2).
+ */
+function migrateCobros_(sheet, props) {
+  if (props.getProperty('COBRO_V2')) return;
+  const last = sheet.getLastRow();
+  if (last >= 2) {
+    const n = last - 1;
+    // Solo se leen y escriben las columnas de cobro, para no alterar teléfonos, fechas ni enlaces.
+    const col = function (h) { return sheet.getRange(2, COL[h] + 1, n, 1); };
+    const read = function (h) { return col(h).getValues(); };
+    const folio = read('Folio'), estatus = read('Estatus'), factura = read('Requiere factura'), pago = read('Pago anticipo');
+    const anticipo = read('Anticipo (MXN)'), abonos = read('Abonos (MXN)'), iva = read('IVA (MXN)');
+    const total = read('Total (MXN)'), saldo = read('Saldo pendiente (MXN)');
+    for (let i = 0; i < n; i++) {
+      if (!folio[i][0] || factura[i][0]) continue;
+      if (estatus[i][0] === 'Pagada' || estatus[i][0] === 'Completada') continue;
+      const a = num_(anticipo[i][0]);
+      let ab = num_(abonos[i][0]);
+      if (pago[i][0] === 'Pagado') ab = r2_(ab + a);
+      factura[i][0] = 'No';
+      iva[i][0] = 0;
+      total[i][0] = a;
+      abonos[i][0] = ab;
+      saldo[i][0] = Math.max(r2_(a - ab), 0);
+    }
+    col('Requiere factura').setValues(factura);
+    col('IVA (MXN)').setValues(iva);
+    col('Total (MXN)').setValues(total);
+    col('Abonos (MXN)').setValues(abonos);
+    col('Saldo pendiente (MXN)').setValues(saldo);
+    SpreadsheetApp.flush();
+  }
+  props.setProperty('COBRO_V2', new Date().toISOString());
+}
+
 /* ---------- Nota de servicio ---------- */
 
 function driveDataUrl_(url, mime) {
@@ -847,6 +922,8 @@ function orderDetail_(sheet, data) {
       cargador: g('Cargador'),
       otros: g('Otros accesorios'),
       presupuesto: num_(g('Costo presupuesto (MXN)')),
+      factura: g('Requiere factura') || 'No',
+      iva: num_(g('IVA (MXN)')),
       anticipo: num_(g('Anticipo (MXN)')),
       total: num_(g('Total (MXN)')),
       saldo: num_(g('Saldo pendiente (MXN)')),

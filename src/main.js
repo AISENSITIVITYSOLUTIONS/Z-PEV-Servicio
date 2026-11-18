@@ -111,8 +111,9 @@ function values() {
     otros: clean($('#otros').value),
     presupuesto: num($('#presupuesto').value),
     anticipo: num($('#anticipo').value),
-    // El costo del servicio es el total de la cuenta; lo que falta pagar = costo − anticipo.
-    total: num($('#presupuesto').value),
+    // El costo presupuesto es solo informativo. Total a pagar = anticipo + IVA 16 % si requiere factura.
+    factura: (form.querySelector('input[name="factura"]:checked') || {}).value === 'Sí' ? 'Sí' : 'No',
+    ...cobro(num($('#anticipo').value), (form.querySelector('input[name="factura"]:checked') || {}).value === 'Sí'),
     plan: (form.querySelector('input[name="plan"]:checked') || {}).value || 'Anticipo y liquidación',
     aceptaTerminos: acepta.checked,
     firma: signature.hasInk()
@@ -140,7 +141,7 @@ function updatePreview() {
   $('#pvPhoto').hidden = !main;
   if (main && $('#pvPhoto img').src !== main.dataUrl) $('#pvPhoto img').src = main.dataUrl;
   $('#pvPhotoN').textContent = photos && photos.count() > 1 ? `${photos.count()} fotos` : '';
-  const saldo = Math.max(v.total - v.anticipo, 0);
+  const saldo = v.total;
   $('#saldo').value = saldo.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   $('#pvNombre').textContent = v.nombre || 'Nombre del cliente';
@@ -151,6 +152,9 @@ function updatePreview() {
   $('#pvPresup').textContent = fmtMXN(v.presupuesto);
   $('#pvAnticipo').textContent = fmtMXN(v.anticipo);
   $('#pvSaldo').textContent = fmtMXN(saldo);
+  $('#pvIvaRow').hidden = v.factura !== 'Sí';
+  $('#pvIva').textContent = fmtMXN(v.iva);
+  $('#totalHint').textContent = v.factura === 'Sí' ? 'anticipo + IVA 16 %' : 'anticipo';
   $('#planHint').textContent = v.plan === 'Varios pagos'
     ? 'El cliente puede abonar varias veces; cada pago se registra en el historial.'
     : 'El saldo se liquida en un solo pago al entregar.';
@@ -172,10 +176,10 @@ function updatePreview() {
 
   const bat = /bater/i.test(v.servicio);
   $('#batHint').classList.toggle('is-hidden', !bat);
-  $('#halfBtn').classList.toggle('is-hidden', !(bat && v.total > 0));
+  $('#halfBtn').classList.toggle('is-hidden', !(bat && v.presupuesto > 0));
 
   $$('.checklist li').forEach((li) => li.classList.toggle('is-done', Boolean(checks[li.dataset.check])));
-  const overpaid = v.anticipo > v.total && v.total > 0;
+  const overpaid = false;
   submitBtn.disabled = !ok || overpaid;
   submitLabel.textContent = overpaid ? 'El anticipo supera el costo' : ok ? 'Enviar orden y guardar' : 'Completa la orden para enviar';
 
@@ -189,6 +193,12 @@ function updatePreview() {
 
 // ================= Borrador automático =================
 const DRAFT_FIELDS = ['nombre', 'telefono', 'marca', 'serie', 'servicio', 'caracteristicas', 'llaves', 'cargador', 'otros', 'presupuesto', 'anticipo'];
+
+function cobro(anticipo, factura) {
+  const a = Math.round(Math.max(anticipo, 0) * 100) / 100;
+  const iva = factura ? Math.round(a * 16) / 100 : 0;
+  return { iva, total: Math.round((a + iva) * 100) / 100 };
+}
 let draftTimer = 0;
 
 function saveDraftNow() {
@@ -205,7 +215,9 @@ function writeDraft() {
   const data = Object.fromEntries(DRAFT_FIELDS.map((k) => [k, $(`#${k}`).value]));
   const enc = form.querySelector('input[name="encendido"]:checked');
   data.encendido = enc ? enc.value : '';
-  const empty = Object.values(data).every((x) => !x);
+  const empty0 = Object.values(data).every((x) => !x);
+  data.factura = (form.querySelector('input[name="factura"]:checked') || {}).value === 'Sí' ? 'Sí' : '';
+  const empty = empty0 && !data.factura;
   try {
     if (empty) localStorage.removeItem(DRAFT_KEY);
     else localStorage.setItem(DRAFT_KEY, JSON.stringify({ data, at: Date.now() }));
@@ -223,6 +235,10 @@ function restoreDraft() {
     if (data.encendido) {
       const r = form.querySelector(`input[name="encendido"][value="${data.encendido}"]`);
       if (r) r.checked = true;
+    }
+    if (data.factura === 'Sí') {
+      const f = form.querySelector('input[name="factura"][value="Sí"]');
+      if (f) f.checked = true;
     }
     const d = new Date(at);
     $('#draftState').textContent = `Borrador recuperado · ${pad(d.getHours())}:${pad(d.getMinutes())}`;
@@ -479,7 +495,7 @@ function deliveryMessage(o, url) {
   return `Estimado(a) ${nombre}:\n\n`
     + `Le confirmamos que el servicio de su *${o.marca}* fue *concluido y entregado*.\n\n`
     + `*Folio:* ${o.folio}\n`
-    + `*Costo presupuesto:* ${fmtMXN(o.total)} · pagado en su totalidad\n`
+    + `*Total:* ${fmtMXN(o.total)} · pagado en su totalidad\n`
     + `*Entrega:* ${o.entregada || new Date().toLocaleDateString('es-MX')}\n\n`
     + `Su comprobante digital de entrega está disponible aquí:\n${url}\n\n`
     + `Gracias por confiar su vehículo a *Z e-Scooters México*. Quedamos a sus órdenes en este mismo número.`;
@@ -932,7 +948,9 @@ form.addEventListener('submit', async (e) => {
     presupuesto: v.presupuesto,
     anticipo: v.anticipo,
     total: v.total,
-    saldo: Math.max(v.total - v.anticipo, 0),
+    saldo: v.total,
+    factura: v.factura,
+    iva: v.iva,
     plan: v.plan,
     llaves: v.llaves,
     cargador: v.cargador,
@@ -991,7 +1009,7 @@ function noteDataFromOrder(o) {
     folio: o.folio, fecha: o.fecha, hora: o.hora, nombre: o.nombre, telefono: o.telefono,
     marca: o.marca, serie: o.serie, encendido: o.encendido, servicio: o.servicio,
     caracteristicas: o.caracteristicas, llaves: o.llaves, cargador: o.cargador, otros: o.otros,
-    presupuesto: o.presupuesto, anticipo: o.anticipo, saldo: o.saldo ?? Math.max(num(o.total) - num(o.anticipo), 0),
+    presupuesto: o.presupuesto, anticipo: o.anticipo, iva: o.iva, factura: o.factura, total: o.total, saldo: o.saldo ?? o.total,
     fotos: (o.fotos?.length || 0) + (o.fotoPrincipal ? 1 : 0),
     fotoUrl: o.fotoPrincipal || '', firmaUrl: o.firmaPng || ''
   };
@@ -1110,15 +1128,15 @@ function showSuccess(o, { offline = false } = {}) {
 
   if (!offline) {
     const msg = `Hola ${o.nombre}, Z e-Scooters México registró tu orden ${o.folio} para ${o.marca}. `
-      + `Servicio: ${o.servicio}. Costo presupuesto: ${fmtMXN(o.total)}; anticipo: ${fmtMXN(o.anticipo)}; total a pagar: ${fmtMXN(o.saldo)}. `
+      + `Servicio: ${o.servicio}. Presupuesto aproximado: ${fmtMXN(o.presupuesto)}; anticipo: ${fmtMXN(o.anticipo)}${o.iva > 0 ? ` + IVA ${fmtMXN(o.iva)} (con factura)` : ''}; total a pagar: ${fmtMXN(o.total)}. `
       + 'Te avisaremos por este medio cuando tu vehículo esté listo. Consultas: 55 6501 8583.';
     $('#okWa').href = waLink(o.telefono, msg);
   }
 
   // Cobro del anticipo: Mercado Pago (VITE_PAYMENTS_ENABLED) y pago a plazos con Aplazo (VITE_APLAZO_ENABLED).
-  const canCharge = !offline && o.anticipo > 0;
+  const canCharge = !offline && o.total > 0;
   const showMp = PAYMENTS_ENABLED && canCharge;
-  const showAplazo = APLAZO_ENABLED && canCharge && o.anticipo >= 100;
+  const showAplazo = APLAZO_ENABLED && canCharge && o.total >= 100;
   $('#payBlock').hidden = !(showMp || showAplazo);
   $('#payMp').hidden = !showMp;
   $('#payAplazo').hidden = !showAplazo;
@@ -1126,7 +1144,7 @@ function showSuccess(o, { offline = false } = {}) {
   $('#payBtn').hidden = false;
   $('#bnplLink').hidden = true;
   $('#bnplBtn').hidden = false;
-  $('#payAmount').textContent = fmtMXN(o.anticipo);
+  $('#payAmount').textContent = fmtMXN(o.total);
 
   overlay.hidden = false;
   requestAnimationFrame(() => overlay.classList.add('is-in'));
@@ -1143,13 +1161,13 @@ $('#payBtn').addEventListener('click', async () => {
   try {
     const { init_point: url } = await createPaymentLink(session.token, {
       folio: lastOrder.folio,
-      amount: lastOrder.anticipo,
+      amount: lastOrder.total,
       nombre: lastOrder.nombre,
       telefono: lastOrder.telefono,
       concepto: `Anticipo orden ${lastOrder.folio} · ${lastOrder.marca}`
     });
     $('#payUrl').value = url;
-    $('#payWa').href = waLink(lastOrder.telefono, `Hola ${lastOrder.nombre}, este es el link para pagar el anticipo de ${fmtMXN(lastOrder.anticipo)} de tu orden ${lastOrder.folio}: ${url}`);
+    $('#payWa').href = waLink(lastOrder.telefono, `Hola ${lastOrder.nombre}, este es el link para pagar el anticipo de ${fmtMXN(lastOrder.total)} de tu orden ${lastOrder.folio}: ${url}`);
     $('#payLink').hidden = false;
     btn.hidden = true;
   } catch (err) {
@@ -1180,13 +1198,13 @@ $('#bnplBtn').addEventListener('click', async () => {
   try {
     const { url, reused } = await createAplazoLink(session.token, {
       folio: lastOrder.folio,
-      amount: lastOrder.anticipo,
+      amount: lastOrder.total,
       nombre: lastOrder.nombre,
       telefono: lastOrder.telefono,
       concepto: `Anticipo orden ${lastOrder.folio} · ${lastOrder.marca}`
     });
     $('#bnplUrl').value = url;
-    $('#bnplWa').href = waLink(lastOrder.telefono, `Hola ${lastOrder.nombre}, ¿no tienes tarjeta de crédito? Puedes pagar el anticipo de ${fmtMXN(lastOrder.anticipo)} de tu orden ${lastOrder.folio} a plazos con Aplazo aquí: ${url}`);
+    $('#bnplWa').href = waLink(lastOrder.telefono, `Hola ${lastOrder.nombre}, ¿no tienes tarjeta de crédito? Puedes pagar el anticipo de ${fmtMXN(lastOrder.total)} de tu orden ${lastOrder.folio} a plazos con Aplazo aquí: ${url}`);
     $('#bnplLink').hidden = false;
     btn.hidden = true;
     if (reused) toast('Este folio ya tenía un link de Aplazo vigente; se reutilizó.', 'ok');

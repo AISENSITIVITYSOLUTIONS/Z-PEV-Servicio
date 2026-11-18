@@ -12,6 +12,7 @@ const LINE = '#E2E0D9';
 const SANS = "'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif";
 const MONO = "'Geist Mono', ui-monospace, Menlo, monospace";
 
+const num = (n) => Number(n) || 0;
 const fmtMXN = (n) => Number(n || 0).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 
@@ -149,15 +150,20 @@ function draw(ctx, d, imgs, paint) {
   // Costos
   y += 56;
   const row = (k, v, yy) => { text(k, PAD, yy, `400 28px ${SANS}`, '#4A4F57'); text(v, W - PAD, yy, `500 28px ${MONO}`, INK, 'right'); };
-  row('Costo presupuesto', fmtMXN(d.presupuesto), y); y += 46;
-  row('Anticipo', fmtMXN(d.anticipo), y); y += 30;
+  row('Anticipo', fmtMXN(d.anticipo), y); y += 46;
+  if (num(d.iva) > 0) { row('IVA 16 % (con factura)', fmtMXN(d.iva), y); y += 46; }
+  y -= 16;
   const boxH = 104;
   if (paint) { ctx.fillStyle = PAPER; roundRect(ctx, PAD - 8, y, W - PAD * 2 + 16, boxH, 22); ctx.fill(); }
-  text('Saldo por pagar', PAD + 20, y + 64, `600 30px ${SANS}`);
-  text(fmtMXN(d.saldo), W - PAD - 20, y + 66, `600 46px ${MONO}`, INK, 'right');
-  y += boxH + 20;
-  text('El presupuesto es aproximado; el costo final se confirma al revisar la unidad.', PAD, y + 12, `400 22px ${SANS}`, MUTED);
-  y += 44;
+  text('Total a pagar', PAD + 20, y + 64, `600 30px ${SANS}`);
+  text(fmtMXN(d.total ?? (num(d.anticipo) + num(d.iva))), W - PAD - 20, y + 66, `600 46px ${MONO}`, INK, 'right');
+  y += boxH + 44;
+  text(`Costo presupuesto (aproximado): ${fmtMXN(d.presupuesto)}`, PAD, y, `500 26px ${SANS}`, '#4A4F57');
+  y += 36;
+  ctx.font = `400 22px ${SANS}`;
+  wrap(ctx, 'Cotización informativa: no se suma al total. El costo final se confirma al revisar la unidad y requiere su autorización.', W - PAD * 2)
+    .forEach((l) => { text(l, PAD, y, `400 22px ${SANS}`, MUTED); y += 30; });
+  y += 14;
 
   // Firma
   y += 24;
