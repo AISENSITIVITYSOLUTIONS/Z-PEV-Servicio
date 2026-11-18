@@ -62,12 +62,52 @@ export function initPWA() {
   sheet.addEventListener('click', (e) => { if (e.target === sheet) closeIosSheet(); });
 
   // Service worker con aviso de actualización (no recarga sola: puede haber una orden a medio capturar).
+  // El botón «Actualizar» del menú busca la versión más reciente cuando el usuario lo pide.
+  const appBtn = $('#appUpdateBtn');
+  const appLabel = appBtn && appBtn.querySelector('span');
+  let updateSW = null;
+  let registration = null;
+  let hasUpdate = false;
+
+  const markNew = () => {
+    hasUpdate = true;
+    $('#updateBar').hidden = false;
+    if (appBtn) { appBtn.classList.add('is-new'); appLabel.textContent = 'Instalar versión nueva'; }
+  };
+
   if ('serviceWorker' in navigator && import.meta.env.PROD) {
-    const updateSW = registerSW({
-      onNeedRefresh() {
-        $('#updateBar').hidden = false;
-      }
+    updateSW = registerSW({
+      onNeedRefresh: markNew,
+      onRegisteredSW(_url, r) { registration = r || null; }
     });
     $('#updateBtn').addEventListener('click', () => updateSW(true));
   }
+
+  const waitInstalled = (worker) => new Promise((resolve) => {
+    if (!worker) return resolve();
+    const done = () => { if (['installed', 'activated', 'redundant'].includes(worker.state)) resolve(); };
+    worker.addEventListener('statechange', done);
+    setTimeout(resolve, 15000);
+    done();
+  });
+
+  appBtn?.addEventListener('click', async () => {
+    if (!navigator.onLine) { appLabel.textContent = 'Sin conexión'; setTimeout(() => { appLabel.textContent = 'Actualizar'; }, 2500); return; }
+    appBtn.disabled = true;
+    appBtn.classList.add('is-busy');
+    appLabel.textContent = 'Buscando…';
+    try {
+      if (updateSW && registration) {
+        if (!hasUpdate) {
+          await registration.update();
+          await waitInstalled(registration.installing);
+        }
+        if (hasUpdate || registration.waiting) { await updateSW(true); return; }
+      }
+      // Ya está en la última versión: recarga para traer los datos y la pantalla al día.
+      location.reload();
+    } catch (_) {
+      location.reload();
+    }
+  });
 }

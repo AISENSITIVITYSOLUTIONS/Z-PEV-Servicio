@@ -124,6 +124,11 @@ a { color: var(--ink); }
   background: transparent; color: var(--rail-text); font-size: 13px; font-weight: 600; cursor: pointer;
 }
 .rail-signout:hover { color: #FFFFFF; border-color: #5A606C; }
+.rail-actions { display: flex; gap: 6px; }
+.rail-actions .rail-signout { flex: 1; }
+.rail-update { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.rail-update.is-new { color: var(--lime); border-color: var(--lime); }
+.rail-update.is-busy svg { animation: spin .8s linear infinite; }
 
 /* ---------- Main ---------- */
 .main { min-width: 0; padding-bottom: 56px; }
