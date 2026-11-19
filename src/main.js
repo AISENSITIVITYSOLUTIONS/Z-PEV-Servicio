@@ -1080,7 +1080,34 @@ async function sendNote(kind = 'png') {
     toast(`No se pudo preparar la nota: ${err.message}`, 'error');
   }
 }
-$('#noteShare').addEventListener('click', () => sendNote('png'));
+// «Enviar al cliente» desde la nota (Historial / Ver nota): abre el chat del número del cliente
+// con el mensaje escrito y deja la nota copiada para pegarla. Sin teléfono válido, comparte el archivo.
+const noteWaMsg = (d) => `Hola ${d.nombre || ''}, te compartimos la nota de servicio ${d.folio} de Z e-Scooters México`
+  + `${d.marca ? ` (${d.marca})` : ''}. Total a pagar: ${fmtMXN(d.total)}. Consultas: 55 6501 8583.`;
+
+function copyPng(pngPromise) {
+  try {
+    if (!navigator.clipboard?.write || typeof ClipboardItem === 'undefined') return Promise.resolve(false);
+    return navigator.clipboard.write([new ClipboardItem({ 'image/png': pngPromise })]).then(() => true, () => false);
+  } catch (_) {
+    return Promise.resolve(false);
+  }
+}
+
+function openClientChat(tel, msg, pngPromise) {
+  const copied = copyPng(pngPromise);
+  window.open(waLink(tel, msg), '_blank', 'noopener');
+  copied.then((ok) => toast(ok
+    ? 'Chat del cliente abierto con el mensaje. La nota quedó copiada: pégala (Ctrl + V) y envía.'
+    : 'Chat del cliente abierto con el mensaje. Para adjuntar la nota usa «Imagen» o «PDF».', ok ? 'ok' : 'info'));
+}
+
+$('#noteShare').addEventListener('click', () => {
+  if (!noteCurrent) return;
+  const { data, canvas } = noteCurrent;
+  if (digits(data.telefono).length !== 10) return sendNote('png');
+  openClientChat(data.telefono, noteWaMsg(data), noteCurrent.png ? Promise.resolve(noteCurrent.png) : canvasToBlob(canvas, 'image/png'));
+});
 $('#notePng').addEventListener('click', async () => {
   if (!noteCurrent) return;
   const blob = await canvasToBlob(noteCurrent.canvas, 'image/png');
@@ -1131,26 +1158,16 @@ async function noteFromSuccess(kind) {
 // copiada en el portapapeles para pegarla (Ctrl+V / mantener presionado → Pegar).
 // La copia se lanza dentro del mismo toque (ClipboardItem con promesa) y luego se abre el chat.
 let okWaUrl = '';
-function copyNoteImage() {
-  try {
-    if (!noteSource || !navigator.clipboard?.write || typeof ClipboardItem === 'undefined') return Promise.resolve(false);
-    const png = (notePrep || Promise.resolve(null)).then(async (prep) => {
-      if (prep?.png && prep.data === noteSource) return prep.png;
-      return canvasToBlob(await renderNote(noteSource), 'image/png');
-    });
-    return navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]).then(() => true, () => false);
-  } catch (_) {
-    return Promise.resolve(false);
-  }
-}
-
 $('#okNoteShare').addEventListener('click', () => {
-  if (!okWaUrl) { toast('La orden no tiene un teléfono de 10 dígitos. Comparte la nota como archivo.', 'error'); return; }
-  const copied = copyNoteImage();
+  if (!okWaUrl || !noteSource) { toast('La orden no tiene un teléfono de 10 dígitos. Comparte la nota como archivo.', 'error'); return; }
+  const src = noteSource;
+  const png = (notePrep || Promise.resolve(null)).then(async (prep) => (prep?.png && prep.data === src
+    ? prep.png : canvasToBlob(await renderNote(src), 'image/png')));
+  const copied = copyPng(png);
   window.open(okWaUrl, '_blank', 'noopener');
   copied.then((ok) => toast(ok
-    ? 'Chat del cliente abierto. La nota quedó copiada: pégala en el chat.'
-    : 'Chat del cliente abierto. Para adjuntar la nota usa «Compartir la nota como archivo».', ok ? 'ok' : 'info'));
+    ? 'Chat del cliente abierto con el mensaje. La nota quedó copiada: pégala (Ctrl + V) y envía.'
+    : 'Chat del cliente abierto con el mensaje. Para adjuntar la nota usa «Compartir la nota como archivo».', ok ? 'ok' : 'info'));
 });
 $('#okShareFile').addEventListener('click', () => noteFromSuccess('png'));
 $('#okNotePdf').addEventListener('click', () => noteFromSuccess('pdf'));
