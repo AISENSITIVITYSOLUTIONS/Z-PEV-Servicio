@@ -24,6 +24,14 @@ const submitLabel = $('.cta-label', submitBtn);
 let session = null;
 let offlineUser = null;
 let lastOrder = null;
+// Envío de la orden: una sola vez por captura.
+//  - submitting: hay un envío en curso (guardar con firma y fotos tarda 10-15 s); se ignoran más toques.
+//  - savedCaptureId: la captura actual ya quedó registrada; no se vuelve a enviar hasta «Capturar otra orden».
+//  - captureId: ID de captura estable para todos los intentos de la misma orden, así el servidor
+//    devuelve el folio existente si llega un reintento.
+let submitting = false;
+let savedCaptureId = '';
+let captureId = '';
 let historyCache = [];
 let isAdmin = false;
 
@@ -180,15 +188,16 @@ function updatePreview() {
 
   $$('.checklist li').forEach((li) => li.classList.toggle('is-done', Boolean(checks[li.dataset.check])));
   const overpaid = false;
-  submitBtn.disabled = !ok || overpaid;
-  submitLabel.textContent = overpaid ? 'El anticipo supera el costo' : ok ? 'Enviar orden y guardar' : 'Completa la orden para enviar';
+  const locked = submitting || Boolean(savedCaptureId);
+  submitBtn.disabled = !ok || overpaid || locked;
+  submitLabel.textContent = submitting ? 'Guardando orden…' : savedCaptureId ? 'Orden registrada' : overpaid ? 'El anticipo supera el costo' : ok ? 'Enviar orden y guardar' : 'Completa la orden para enviar';
 
   const done = Object.values(checks).filter(Boolean).length;
   const dockCta = $('#dockCta');
-  dockCta.disabled = !ok || overpaid;
-  dockCta.classList.toggle('is-ready', ok && !overpaid);
+  dockCta.disabled = !ok || overpaid || locked;
+  dockCta.classList.toggle('is-ready', ok && !overpaid && !locked);
   $('#dockProgress').textContent = `${done}/${Object.keys(checks).length}`;
-  $('#dockLabel').textContent = overpaid ? 'Anticipo mayor al costo' : ok ? 'Enviar orden' : 'Completa la orden';
+  $('#dockLabel').textContent = submitting ? 'Guardando…' : savedCaptureId ? 'Orden registrada' : overpaid ? 'Anticipo mayor al costo' : ok ? 'Enviar orden' : 'Completa la orden';
 }
 
 // ================= Borrador automático =================
@@ -922,6 +931,11 @@ async function saveOffline(order, reason) {
 
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
+  if (submitting) return;
+  if (savedCaptureId) {
+    toast('Esta orden ya quedó registrada. Pulsa «Capturar otra orden» para una nueva.', 'warn');
+    return;
+  }
   const v = values();
   const { ok, checks } = validate(v);
   if (!ok) {
@@ -933,8 +947,9 @@ form.addEventListener('submit', async (e) => {
   setNowDefaults();
   v.fecha = $('#fecha').value;
   v.hora = $('#hora').value;
+  if (!captureId) captureId = newClientId();
   const order = {
-    clientId: newClientId(),
+    clientId: captureId,
     termsVersion: TERMS_VERSION,
     capturadoEn: new Date().toISOString(),
     fecha: v.fecha,
@@ -963,15 +978,17 @@ form.addEventListener('submit', async (e) => {
 
   session = getSession();
   if (!navigator.onLine || !session) {
+    savedCaptureId = captureId;
     return saveOffline(order, !navigator.onLine ? '' : 'Tu sesión venció: la orden quedó guardada en el teléfono. Inicia sesión para enviarla.');
   }
 
-  submitBtn.disabled = true;
+  submitting = true;
   submitBtn.classList.add('is-loading');
-  submitLabel.textContent = 'Guardando orden…';
+  updatePreview();
   try {
     submitLabel.textContent = order.fotos.length ? `Guardando orden y ${order.fotos.length + 1} fotos…` : 'Guardando orden…';
     const res = await deliverOrder(session.token, order);
+    savedCaptureId = captureId;
     lastOrder = { ...order, folio: res.folio };
     clearDraft();
     showSuccess(lastOrder);
@@ -979,6 +996,7 @@ form.addEventListener('submit', async (e) => {
   } catch (err) {
     if (order._folio && (isNetworkError(err) || isAuthError(err))) {
       // La orden ya tiene folio; solo faltan fotos. Se terminan de subir desde la cola.
+      savedCaptureId = captureId;
       await enqueue(order);
       requestPersistence();
       lastOrder = { ...order, folio: order._folio };
@@ -987,15 +1005,17 @@ form.addEventListener('submit', async (e) => {
       renderPending();
       toast('Orden registrada. Algunas fotos se terminarán de subir al volver la señal.', 'warn');
     } else if (isNetworkError(err)) {
+      savedCaptureId = captureId;
       await saveOffline(order, 'Se perdió la señal: la orden quedó guardada en el teléfono y se enviará sola.');
     } else if (isAuthError(err)) {
+      savedCaptureId = captureId;
       await saveOffline(order, 'Tu sesión venció: la orden quedó guardada en el teléfono. Inicia sesión para enviarla.');
     } else {
+      // Error del servidor: se puede reintentar; el mismo captureId evita duplicar si sí se guardó.
       toast(`No se pudo guardar: ${err.message}`, 'error');
-      submitBtn.disabled = false;
-      submitLabel.textContent = 'Enviar orden y guardar';
     }
   } finally {
+    submitting = false;
     submitBtn.classList.remove('is-loading');
     updatePreview();
   }
@@ -1390,6 +1410,9 @@ function setNowDefaults() {
 setInterval(() => { if (!overlay || overlay.hidden) setNowDefaults(); }, 20000);
 
 function resetForm() {
+  submitting = false;
+  savedCaptureId = '';
+  captureId = '';
   form.reset();
   const planDefault = form.querySelector('input[name="plan"][value="Anticipo y liquidación"]');
   if (planDefault) planDefault.checked = true;

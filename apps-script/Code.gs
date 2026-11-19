@@ -274,7 +274,8 @@ function findRecentSame_(sheet, data) {
   for (let i = rows.length - 1; i >= 0; i--) {
     const r = rows[i];
     const reg = r[COL['Registrado']];
-    if (!(reg instanceof Date) || reg.getTime() < limit) continue;
+    const at = reg instanceof Date ? reg.getTime() : new Date(reg).getTime();
+    if (!at || at < limit) continue;
     const have = [norm(r[COL['Teléfono']]), norm(r[COL['Marca y modelo']]), norm(r[COL['N° de serie']]),
       norm(r[COL['Descripción del servicio']]), norm(r[COL['Características generales']])];
     if (have.join('|') === want.join('|') && num_(r[COL['Costo presupuesto (MXN)']]) === cost) return r[COL['Folio']];
