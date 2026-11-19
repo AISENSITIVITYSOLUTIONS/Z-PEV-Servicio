@@ -7,7 +7,7 @@ import { enqueue, listPending, removePending, updatePending, newClientId, reques
 import { mountPhotos } from './photos.js';
 import { renderTag, printTag } from './tag.js';
 import { renderNote, noteToPdf, canvasToBlob, shareNote, noteFileName } from './note.js';
-import { API_URL, PAYMENTS_ENABLED, APLAZO_ENABLED, uploadPhoto, getOrderDetail, createOrder, listOrders, addPayment, setPaymentPlan, completeOrder, deleteOrder, createPaymentLink, createAplazoLink, cancelAplazoLink } from './api.js';
+import { API_URL, PAYMENTS_ENABLED, APLAZO_ENABLED, uploadPhoto, getOrderDetail, createOrder, listOrders, addPayment, setPaymentPlan, completeOrder, deleteOrder, createPaymentLink, createAplazoLink, cancelAplazoLink, sendNoteWhatsApp } from './api.js';
 import { initPWA } from './pwa.js';
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
@@ -1080,33 +1080,53 @@ async function sendNote(kind = 'png') {
     toast(`No se pudo preparar la nota: ${err.message}`, 'error');
   }
 }
-// «Enviar al cliente» desde la nota (Historial / Ver nota): abre el chat del número del cliente
-// con el mensaje escrito y deja la nota copiada para pegarla. Sin teléfono válido, comparte el archivo.
-const noteWaMsg = (d) => `Hola ${d.nombre || ''}, te compartimos la nota de servicio ${d.folio} de Z e-Scooters México`
-  + `${d.marca ? ` (${d.marca})` : ''}. Total a pagar: ${fmtMXN(d.total)}. Consultas: 55 6501 8583.`;
+// Envío automático: la app genera el PDF de la nota y el backend lo manda por la API de WhatsApp
+// directamente al teléfono de la orden (sin elegir contacto ni pulsar Enviar).
+const blobToDataUrl = (blob) => new Promise((resolve, reject) => {
+  const r = new FileReader();
+  r.onload = () => resolve(r.result);
+  r.onerror = () => reject(r.error);
+  r.readAsDataURL(blob);
+});
 
-function copyPng(pngPromise) {
+async function sendNoteAuto(btn, data, canvas) {
+  session = getSession();
+  if (!navigator.onLine || !session) {
+    toast(!navigator.onLine ? 'Sin conexión: no se puede enviar la nota.' : 'Tu sesión venció. Inicia sesión y vuelve a enviar.', 'error');
+    return false;
+  }
+  const prev = btn.innerHTML;
+  btn.disabled = true;
+  btn.classList.add('is-busy');
   try {
-    if (!navigator.clipboard?.write || typeof ClipboardItem === 'undefined') return Promise.resolve(false);
-    return navigator.clipboard.write([new ClipboardItem({ 'image/png': pngPromise })]).then(() => true, () => false);
-  } catch (_) {
-    return Promise.resolve(false);
+    btn.lastChild.textContent = ' Enviando…';
+    const pdf = await noteToPdf(canvas, data);
+    const r = await sendNoteWhatsApp(session.token, {
+      folio: data.folio, telefono: data.telefono, nombre: data.nombre, total: fmtMXN(data.total),
+      fileName: noteFileName(data, 'pdf'), dataUrl: await blobToDataUrl(pdf), mensaje: noteWaMsg(data)
+    });
+    toast(`Nota enviada por WhatsApp al ${formatPhone(r.to || digits(data.telefono))}.`, 'ok');
+    return true;
+  } catch (err) {
+    toast(`No se pudo enviar la nota por WhatsApp: ${err.message}`, 'error');
+    return false;
+  } finally {
+    btn.innerHTML = prev;
+    btn.disabled = false;
+    btn.classList.remove('is-busy');
   }
 }
 
-function openClientChat(tel, msg, pngPromise) {
-  const copied = copyPng(pngPromise);
-  window.open(waLink(tel, msg), '_blank', 'noopener');
-  copied.then((ok) => toast(ok
-    ? 'Chat del cliente abierto con el mensaje. La nota quedó copiada: pégala (Ctrl + V) y envía.'
-    : 'Chat del cliente abierto con el mensaje. Para adjuntar la nota usa «Imagen» o «PDF».', ok ? 'ok' : 'info'));
-}
+const noteWaMsg = (d) => `Hola ${d.nombre || ''}, te compartimos la nota de servicio ${d.folio} de Z e-Scooters México`
+  + `${d.marca ? ` (${d.marca})` : ''}. Total a pagar: ${fmtMXN(d.total)}. Consultas: 55 6501 8583.`;
+
+
 
 $('#noteShare').addEventListener('click', () => {
   if (!noteCurrent) return;
   const { data, canvas } = noteCurrent;
   if (digits(data.telefono).length !== 10) return sendNote('png');
-  openClientChat(data.telefono, noteWaMsg(data), noteCurrent.png ? Promise.resolve(noteCurrent.png) : canvasToBlob(canvas, 'image/png'));
+  sendNoteAuto($('#noteShare'), data, canvas);
 });
 $('#notePng').addEventListener('click', async () => {
   if (!noteCurrent) return;
@@ -1154,20 +1174,20 @@ async function noteFromSuccess(kind) {
     toast(`No se pudo preparar la nota: ${err.message}`, 'error');
   }
 }
-// Envío directo al número del cliente: abre su chat de WhatsApp con el mensaje y deja la nota
-// copiada en el portapapeles para pegarla (Ctrl+V / mantener presionado → Pegar).
-// La copia se lanza dentro del mismo toque (ClipboardItem con promesa) y luego se abre el chat.
+// Confirmación: la nota se envía al teléfono de la orden (okWaUrl solo indica que hay teléfono válido).
 let okWaUrl = '';
-$('#okNoteShare').addEventListener('click', () => {
+$('#okNoteShare').addEventListener('click', async () => {
   if (!okWaUrl || !noteSource) { toast('La orden no tiene un teléfono de 10 dígitos. Comparte la nota como archivo.', 'error'); return; }
   const src = noteSource;
-  const png = (notePrep || Promise.resolve(null)).then(async (prep) => (prep?.png && prep.data === src
-    ? prep.png : canvasToBlob(await renderNote(src), 'image/png')));
-  const copied = copyPng(png);
-  window.open(okWaUrl, '_blank', 'noopener');
-  copied.then((ok) => toast(ok
-    ? 'Chat del cliente abierto con el mensaje. La nota quedó copiada: pégala (Ctrl + V) y envía.'
-    : 'Chat del cliente abierto con el mensaje. Para adjuntar la nota usa «Compartir la nota como archivo».', ok ? 'ok' : 'info'));
+  const btn = $('#okNoteShare');
+  btn.disabled = true;
+  try {
+    const prep = notePrep ? await notePrep : null;
+    const canvas = prep?.data === src ? prep.canvas : await renderNote(src);
+    await sendNoteAuto(btn, src, canvas);
+  } finally {
+    btn.disabled = false;
+  }
 });
 $('#okShareFile').addEventListener('click', () => noteFromSuccess('png'));
 $('#okNotePdf').addEventListener('click', () => noteFromSuccess('pdf'));
