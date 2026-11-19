@@ -1127,7 +1127,32 @@ async function noteFromSuccess(kind) {
     toast(`No se pudo preparar la nota: ${err.message}`, 'error');
   }
 }
-$('#okNoteShare').addEventListener('click', () => noteFromSuccess('png'));
+// Envío directo al número del cliente: abre su chat de WhatsApp con el mensaje y deja la nota
+// copiada en el portapapeles para pegarla (Ctrl+V / mantener presionado → Pegar).
+// La copia se lanza dentro del mismo toque (ClipboardItem con promesa) y luego se abre el chat.
+let okWaUrl = '';
+function copyNoteImage() {
+  try {
+    if (!noteSource || !navigator.clipboard?.write || typeof ClipboardItem === 'undefined') return Promise.resolve(false);
+    const png = (notePrep || Promise.resolve(null)).then(async (prep) => {
+      if (prep?.png && prep.data === noteSource) return prep.png;
+      return canvasToBlob(await renderNote(noteSource), 'image/png');
+    });
+    return navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]).then(() => true, () => false);
+  } catch (_) {
+    return Promise.resolve(false);
+  }
+}
+
+$('#okNoteShare').addEventListener('click', () => {
+  if (!okWaUrl) { toast('La orden no tiene un teléfono de 10 dígitos. Comparte la nota como archivo.', 'error'); return; }
+  const copied = copyNoteImage();
+  window.open(okWaUrl, '_blank', 'noopener');
+  copied.then((ok) => toast(ok
+    ? 'Chat del cliente abierto. La nota quedó copiada: pégala en el chat.'
+    : 'Chat del cliente abierto. Para adjuntar la nota usa «Compartir la nota como archivo».', ok ? 'ok' : 'info'));
+});
+$('#okShareFile').addEventListener('click', () => noteFromSuccess('png'));
 $('#okNotePdf').addEventListener('click', () => noteFromSuccess('pdf'));
 $('#okNoteView').addEventListener('click', () => noteFromSuccess('view'));
 
@@ -1138,7 +1163,7 @@ function showSuccess(o, { offline = false } = {}) {
   $('#okFolio').textContent = offline ? 'Folio pendiente' : o.folio;
   $('#okOffline').hidden = !offline;
   $('.success-text', overlay).hidden = offline;
-  $('#okWa').hidden = offline;
+  $('#okShareFile').hidden = offline;
   $('#okNoteActions').hidden = offline;
   noteSource = offline ? null : noteDataFromOrder(o);
   $('.success-mark', overlay).classList.toggle('is-pending', offline);
@@ -1147,7 +1172,7 @@ function showSuccess(o, { offline = false } = {}) {
     const msg = `Hola ${o.nombre}, Z e-Scooters México registró tu orden ${o.folio} para ${o.marca}. `
       + `Servicio: ${o.servicio}. Presupuesto aproximado: ${fmtMXN(o.presupuesto)}; anticipo: ${fmtMXN(o.anticipo)}${o.iva > 0 ? ` + IVA ${fmtMXN(o.iva)} (con factura)` : ''}; total a pagar: ${fmtMXN(o.total)}. `
       + 'Te avisaremos por este medio cuando tu vehículo esté listo. Consultas: 55 6501 8583.';
-    $('#okWa').href = waLink(o.telefono, msg);
+    okWaUrl = digits(o.telefono).length === 10 ? waLink(o.telefono, msg) : '';
   }
 
   // Cobro del anticipo: Mercado Pago (VITE_PAYMENTS_ENABLED) y pago a plazos con Aplazo (VITE_APLAZO_ENABLED).
