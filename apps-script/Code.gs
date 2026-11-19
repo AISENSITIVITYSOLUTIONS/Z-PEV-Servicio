@@ -12,6 +12,9 @@
  *   deleteOrder Solo administradores (ADMIN_EMAILS): mueve la orden a la hoja «Órdenes eliminadas»
  *               con quién, cuándo y motivo, y la quita de «Órdenes». El folio no se reutiliza.
  *   payment  Uso interno de la función de cobros (Firebase): marca el pago del anticipo.
+ *   sendNote Envía la nota de servicio (PDF adjunto) al WhatsApp del cliente con la API de WhatsApp
+ *            Cloud (línea del bot Z·IA): sube el PDF a Meta y manda la plantilla WA_TEMPLATE con el
+ *            documento como encabezado. Propiedades: WA_TOKEN, WA_PHONE_ID, WA_TEMPLATE, WA_TEMPLATE_LANG.
  *
  * GET ?action=receipt&f=<folio>&t=<token>  Comprobante público de entrega (solo lectura). El token es
  *   una firma HMAC del folio con RECEIPT_SECRET (se crea sola la primera vez); sin token válido no hay datos.
@@ -122,6 +125,7 @@ function doPost(e) {
       return json_(completeOrder_(sheet, data, email));
     }
     if (action === 'detail') return json_(orderDetail_(sheet, data));
+    if (action === 'sendNote') return json_(sendNoteWhatsApp_(data, props, email));
     if (action === 'photo') {
       lock.waitLock(20000);
       return json_(addPhoto_(sheet, data, props));
@@ -1014,4 +1018,95 @@ function autorizarPermisos() {
   DriveApp.getFolderById(props.getProperty('DRIVE_FOLDER_ID')).getName();
   UrlFetchApp.fetch('https://oauth2.googleapis.com/tokeninfo?id_token=x', { muteHttpExceptions: true });
   Logger.log('Permisos correctos.');
+}
+
+
+// ---------- Nota de servicio por WhatsApp (API de WhatsApp Cloud) ----------
+//
+// Propiedades del script:
+//   WA_TOKEN          Token permanente del System User de Meta (el mismo del bot Z·IA, empieza con EAA).
+//   WA_PHONE_ID       PHONE_NUMBER_ID de la línea que envía (Z·IA: 1451228848071523).
+//   WA_TEMPLATE       Nombre de la plantilla aprobada (categoría Utilidad, encabezado Documento),
+//                     cuerpo con 3 variables: {{1}} nombre, {{2}} folio, {{3}} total a pagar.
+//   WA_TEMPLATE_LANG  Idioma de la plantilla (por omisión es_MX).
+// Sin WA_TEMPLATE se intenta un mensaje de documento directo, que Meta solo entrega si el cliente
+// escribió a la línea en las últimas 24 h.
+const WA_GRAPH_ = 'https://graph.facebook.com/v23.0/';
+
+function sendNoteWhatsApp_(data, props, email) {
+  const token = props.getProperty('WA_TOKEN');
+  const phoneId = props.getProperty('WA_PHONE_ID');
+  if (!token || !phoneId) return { ok: false, error: 'Falta configurar WA_TOKEN y WA_PHONE_ID en el backend.' };
+
+  const tel = String(data.telefono || '').replace(/\D/g, '').slice(-10);
+  if (tel.length !== 10) return { ok: false, error: 'La orden no tiene un teléfono de 10 dígitos.' };
+  const m = /^data:([^;]+);base64,(.+)$/.exec(String(data.dataUrl || ''));
+  if (!m) return { ok: false, error: 'No llegó el archivo de la nota.' };
+
+  const folio = String(data.folio || '').slice(0, 40);
+  const fileName = String(data.fileName || ('Nota-' + folio + '.pdf')).replace(/[^\w.\-]/g, '_');
+  const blob = Utilities.newBlob(Utilities.base64Decode(m[2]), m[1], fileName);
+  const isPdf = m[1] === 'application/pdf';
+
+  // 1) Subir el archivo a Meta.
+  const up = UrlFetchApp.fetch(WA_GRAPH_ + phoneId + '/media', {
+    method: 'post',
+    headers: { Authorization: 'Bearer ' + token },
+    payload: { messaging_product: 'whatsapp', type: m[1], file: blob },
+    muteHttpExceptions: true
+  });
+  const upJson = JSON.parse(up.getContentText() || '{}');
+  if (!upJson.id) return { ok: false, error: 'Meta no aceptó el archivo: ' + waError_(upJson) };
+
+  const media = isPdf ? { id: upJson.id, filename: fileName } : { id: upJson.id };
+  const to = '52' + tel;
+  const template = props.getProperty('WA_TEMPLATE');
+  let msg;
+  if (template) {
+    msg = {
+      messaging_product: 'whatsapp', to: to, type: 'template',
+      template: {
+        name: template,
+        language: { code: props.getProperty('WA_TEMPLATE_LANG') || 'es_MX' },
+        components: [
+          { type: 'header', parameters: [isPdf ? { type: 'document', document: media } : { type: 'image', image: media }] },
+          { type: 'body', parameters: [
+            { type: 'text', text: String(data.nombre || 'cliente').slice(0, 60) },
+            { type: 'text', text: folio },
+            { type: 'text', text: String(data.total || '$0.00') }
+          ] }
+        ]
+      }
+    };
+  } else {
+    msg = { messaging_product: 'whatsapp', to: to, type: isPdf ? 'document' : 'image' };
+    msg[msg.type] = Object.assign({}, media, { caption: String(data.mensaje || ('Nota de servicio ' + folio + ' · Z e-Scooters México')).slice(0, 1000) });
+  }
+
+  // 2) Enviar al número del cliente.
+  const res = UrlFetchApp.fetch(WA_GRAPH_ + phoneId + '/messages', {
+    method: 'post', contentType: 'application/json',
+    headers: { Authorization: 'Bearer ' + token },
+    payload: JSON.stringify(msg), muteHttpExceptions: true
+  });
+  const json = JSON.parse(res.getContentText() || '{}');
+  const id = json.messages && json.messages[0] && json.messages[0].id;
+  logWhatsApp_(props, { folio: folio, tel: tel, email: email, ok: !!id, detalle: id || waError_(json) });
+  if (!id) return { ok: false, error: 'WhatsApp no envió la nota: ' + waError_(json) };
+  return { ok: true, messageId: id, to: tel };
+}
+
+function waError_(j) {
+  const e = (j && j.error) || {};
+  return [e.code, e.error_data && e.error_data.details, e.message].filter(Boolean).join(' · ') || 'respuesta sin detalle';
+}
+
+// Bitácora en la pestaña «WhatsApp» de la hoja.
+function logWhatsApp_(props, r) {
+  try {
+    const ss = SpreadsheetApp.openById(props.getProperty('SHEET_ID'));
+    const sh = ss.getSheetByName('WhatsApp') || ss.insertSheet('WhatsApp');
+    if (sh.getLastRow() === 0) sh.appendRow(['Fecha', 'Folio', 'Teléfono', 'Enviado por', 'Resultado', 'Detalle']);
+    sh.appendRow([new Date(), r.folio, r.tel, r.email, r.ok ? 'Enviado' : 'Error', r.detalle]);
+  } catch (_) { /* la bitácora no debe impedir el envío */ }
 }

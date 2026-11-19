@@ -42,6 +42,11 @@ export function getOrderDetail(idToken, folio) {
   return postSheets({ action: 'detail', idToken, folio }, 45000);
 }
 
+/** Envía la nota (PDF o imagen como data URL) al WhatsApp del cliente desde la línea de la empresa. */
+export function sendNoteWhatsApp(idToken, payload) {
+  return postSheets({ action: 'sendNote', idToken, ...payload }, 60000);
+}
+
 export function listOrders(idToken, limit = 60) {
   return postSheets({ action: 'list', idToken, limit });
 }
