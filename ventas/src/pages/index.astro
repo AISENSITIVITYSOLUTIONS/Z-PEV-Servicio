@@ -1,0 +1,165 @@
+---
+import Base from "../layouts/Base.astro";
+import Card from "../components/Card.astro";
+import cat from "../data/catalogo.json";
+import { dinero, CONFIG } from "../lib/z.js";
+
+const P = cat.productos;
+const por = (slug) => P.find((p) => p.slug === slug);
+const estrella = por("ks-n14-kse");
+const destacados = ["ks-c1", "ks-n13", "ks-n14-kse"].map(por);
+
+const veh = P.filter((p) => p.seccion === "vehiculos");
+const n = (f) => P.filter(f).length;
+const minPrecio = (f) => Math.min(...P.filter(f).map((p) => p.precio).filter(Boolean));
+const cats = [
+  { t: "Scooters", href: "/catalogo/?tipo=Scooter+eléctrico", n: n((p) => p.tipo === "Scooter eléctrico"), p: `KingSong, Kaabo y Langfeite. Desde ${dinero(minPrecio((p) => p.tipo === "Scooter eléctrico"))}.`, img: "/fotos/ks-n13.webp" },
+  { t: "Monociclos", href: "/catalogo/?tipo=Monociclo+eléctrico", n: n((p) => p.tipo === "Monociclo eléctrico"), p: `KingSong e Inmotion, de ciudad a alto rendimiento. Desde ${dinero(minPrecio((p) => p.tipo === "Monociclo eléctrico"))}.` },
+  { t: "Motos Nosfet", href: "/catalogo/?tipo=Moto+eléctrica", n: n((p) => p.tipo === "Moto eléctrica"), p: "Aeon, Aero, Apex y Xeno." },
+  { t: "Baterías", href: "/baterias/", n: n((p) => p.seccion === "baterias"), p: "Reemplazo, más autonomía y fabricación a medida con Battery Match." },
+  { t: "Refacciones", href: "/catalogo/?seccion=refacciones", n: n((p) => p.seccion === "refacciones"), p: "Llantas, frenos, motores y accesorios para tu equipo." },
+];
+const s = estrella.specs;
+const pol = cat.politicas;
+---
+<Base actual="inicio">
+  <section class="hero">
+    <canvas class="estelas" aria-hidden="true"></canvas>
+    <div class="wrap hero-grid">
+      <div>
+        <span class="kicker">Z e-Scooters México · Patriotismo 176, CDMX</span>
+        <h1 class="display" style="margin-top:22px">
+          <span style="display:block;overflow:hidden"><span class="ln" style="display:block">Muévete</span></span>
+          <span style="display:block;overflow:hidden"><span class="ln rojo" style="display:block">eléctrico.</span></span>
+        </h1>
+        <p class="lead">Scooters, monociclos y motos con taller propio, baterías a medida y factura CFDI 4.0. Arma tu cotización aquí y Z·IA la recibe por WhatsApp con tu folio: nadie te vuelve a preguntar lo que ya escribiste.</p>
+        <div class="hero-ctas">
+          <a class="btn btn-red" href="/asistente/">Encuentra el tuyo en 5 preguntas</a>
+          <a class="btn" href="/catalogo/">Ver los {veh.length} modelos</a>
+        </div>
+        <div class="hero-meta">
+          <span><b>{P.length}</b> productos con precio vigente</span>
+          <span><b>{cat.conteo.baterias}</b> baterías y cargadores</span>
+          <span>Taller multimarca</span>
+        </div>
+      </div>
+      <div class="stage">
+        <div class="cono"></div>
+        <div class="halo"></div>
+        <div class="piso"></div>
+        <div class="aro"></div>
+        <div class="aro b"></div>
+        <img class="prod" src={estrella.foto} alt={estrella.nombre} width="569" height="862" fetchpriority="high" />
+        <div class="hud h1"><span class="v"><span data-cuenta={s.velocidad_kmh}>{s.velocidad_kmh}</span><small>km/h</small></span><span class="l">Velocidad máxima</span><span class="barra"><i style={`--w:${s.velocidad_kmh}%`}></i></span></div>
+        <div class="hud h2"><span class="v"><span data-cuenta={s.autonomia_km}>{s.autonomia_km}</span><small>km</small></span><span class="l">Autonomía por carga</span><span class="barra"><i style="--w:40%"></i></span></div>
+        <div class="hud h3"><span class="v"><span data-cuenta={s.potencia_w}>{s.potencia_w}</span><small>W · {s.potencia_pico_w} pico</small></span><span class="l">Motor</span></div>
+        <a class="stage-tag" href={`/modelo/${estrella.slug}/`}>
+          <div class="n">{estrella.nombre}</div>
+          <div class="p" data-precio={estrella.id}>{dinero(estrella.precio)}</div>
+          {estrella.existencias && <span class="estado ok"><i></i>{estrella.existencias.unidades} en existencia</span>}
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <div class="cinta" aria-hidden="true"><div class="pista">
+    {[0, 1].map(() => ["KingSong", "Kaabo", "Langfeite", "Inmotion", "Nosfet", "Hyvel", "Taller Z"].map((m) => <span>{m}</span>))}
+  </div></div>
+
+  <section class="sec">
+    <div class="wrap">
+      <div class="sec-head split">
+        <div style="display:grid;gap:18px">
+          <span class="kicker" data-reveal>Para empezar</span>
+          <h2 class="h2" data-reveal>Tres KingSong con existencias.</h2>
+        </div>
+        <p class="lead" data-reveal>Existencias del corte del {new Date(cat.fuentes.inventario_corte + "T12:00").toLocaleDateString("es-MX", { day: "numeric", month: "long" })}. Precio de lista con IVA; si hay promoción vigente se aplica sola.</p>
+      </div>
+      <div class="grid-prod">{destacados.map((p) => <Card p={p} />)}</div>
+    </div>
+  </section>
+
+  <section class="sec" style="padding-top:0">
+    <div class="wrap">
+      <div class="sec-head">
+        <span class="kicker" data-reveal>Catálogo</span>
+        <h2 class="h2" data-reveal>Todo lo que vende Z, con precio a la vista.</h2>
+      </div>
+      <div class="cats">
+        {cats.map((c, i) => (
+          <a class="cat" href={c.href} data-reveal={i * 0.06}>
+            {c.img && <img class="bg" src={c.img} alt="" loading="lazy" />}
+            <span class="flecha"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
+            <span class="cnt">{c.n}</span>
+            <div><div class="t">{c.t}</div><p>{c.p}</p></div>
+          </a>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="ecosistema" style="padding-top:0">
+    <div class="wrap">
+      <div class="sec-head split">
+        <div style="display:grid;gap:18px">
+          <span class="kicker" data-reveal>Cómo compras</span>
+          <h2 class="h2" data-reveal>Una sola línea, de la vitrina al taller.</h2>
+        </div>
+        <p class="lead" data-reveal>Este sitio no es una tienda aparte: lee los mismos precios que Z·IA, entrega tu pedido con folio por WhatsApp, factura con FacturAI y da servicio con la orden digital de Z-PEV Servicio.</p>
+      </div>
+      <div class="eco">
+        <div class="bus" aria-hidden="true"><i></i><span class="pulso"></span></div>
+        <div class="nodo aqui"><span class="dot"></span><span class="ix">01 · Aquí</span><span class="nm">Z-PEV Ventas</span>
+          <p>Catálogo, asistente de compra, Battery Match y cotización.</p>
+          <ul><li>Precios de KB_Productos, la base de Z·IA</li><li>Existencias del último corte</li><li>Folio por cotización</li></ul></div>
+        <div class="nodo"><span class="dot"></span><span class="ix">02 · WhatsApp</span><span class="nm">Z·IA</span>
+          <p>El asistente recibe tu cotización completa y la continúa a cualquier hora.</p>
+          <ul><li>Reconoce el modelo por su clave (P0002…)</li><li>Escala a un asesor cuando hace falta</li><li>Línea {CONFIG.WA_ZIA_LEGIBLE}</li></ul></div>
+        <div class="nodo"><span class="dot"></span><span class="ix">03 · CFDI 4.0</span><span class="nm">FacturAI</span>
+          <p>Tus datos fiscales viajan con el pedido y la factura sale timbrada.</p>
+          <ul><li>Clave SAT ya asignada a cada producto</li><li>RFC, régimen y uso validados antes de enviar</li><li>PDF y XML a tu correo</li></ul></div>
+        <div class="nodo"><span class="dot"></span><span class="ix">04 · Taller</span><span class="nm">Z-PEV Servicio</span>
+          <p>Mantenimiento y reparación con orden digital y firma del cliente.</p>
+          <ul><li>Folio ZPEV, presupuesto y anticipo</li><li>Comprobante PDF por WhatsApp</li><li>Garantía de reparación de 7 días</li></ul></div>
+      </div>
+      <div class="flujo" data-reveal>
+        <div><b>1 · Eliges</b>Catálogo, asistente o Battery Match.</div>
+        <div><b>2 · Cotizas</b>Folio ZV con modelos, CP y datos fiscales.</div>
+        <div><b>3 · Z·IA confirma</b>Existencia, entrega y forma de pago.</div>
+        <div><b>4 · Pagas y facturas</b>Transferencia o tarjeta; CFDI con FacturAI.</div>
+        <div><b>5 · Te acompañamos</b>Servicio y refacciones en el taller.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" style="padding-top:0">
+    <div class="wrap">
+      <div class="panel" style="display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:32px;align-items:center;background:radial-gradient(120% 140% at 100% 0%,rgba(236,42,31,.16),var(--ink-2) 55%)" data-reveal>
+        <div style="display:grid;gap:18px">
+          <span class="kicker">Battery Match</span>
+          <h2 class="h2">La batería correcta, o ninguna.</h2>
+          <p class="lead">Solo marcamos «compatible» cuando coinciden voltaje, química, BMS, conector, medidas y cargador. Si falta un dato, te llevamos a evaluación técnica, no a la caja.</p>
+          <div class="hero-ctas" style="margin-top:6px"><a class="btn btn-red" href="/baterias/">Empezar Battery Match</a><a class="btn" href="/baterias/#calculadora">Calcular autonomía</a></div>
+        </div>
+        <div class="kv" style="grid-template-columns:repeat(2,minmax(0,1fr))">
+          {["36 V", "48 V", "52 V", "60 V"].map((v) => <div><b>{v}</b><span>{P.filter((p) => p.seccion === "baterias" && new RegExp("\\b" + v.replace(" V", "") + "\\s?v", "i").test(p.nombre)).length} opciones</span></div>)}
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" style="padding-top:0">
+    <div class="wrap">
+      <div class="sec-head split">
+        <div style="display:grid;gap:18px"><span class="kicker" data-reveal>Taller Z</span><h2 class="h2" data-reveal>Servicio con reglas claras.</h2></div>
+        <a class="btn" href="/taller/" data-reveal style="justify-self:start">Conoce el taller</a>
+      </div>
+      <div class="bloques">
+        <div class="bloque" data-reveal><span class="big">$500 + IVA</span><p>{pol.diagnostico?.texto}</p></div>
+        <div class="bloque" data-reveal=".08"><span class="big">7 días</span><p>{pol.garantia?.texto}</p></div>
+        <div class="bloque" data-reveal=".16"><span class="big">Lun–Sáb</span><p>{pol.horario?.texto} {pol.direccion?.texto}</p></div>
+      </div>
+    </div>
+  </section>
+  <script>import "../scripts/inicio.js";</script>
+</Base>

@@ -1,0 +1,134 @@
+---
+import Base from "../../layouts/Base.astro";
+import Visual from "../../components/Visual.astro";
+import Card from "../../components/Card.astro";
+import cat from "../../data/catalogo.json";
+import { dinero, estadoClase, preguntaZIA } from "../../lib/z.js";
+
+export function getStaticPaths() {
+  return cat.productos.map((p) => ({ params: { slug: p.slug }, props: { p } }));
+}
+const { p } = Astro.props;
+const [cls, txt] = estadoClase(p);
+const s = p.specs || {};
+const n = (v) => { const x = parseFloat(String(v ?? "").replace(/[^0-9.]/g, "")); return Number.isFinite(x) ? x : null; };
+const vel = n(s.velocidad_kmh), aut = n(s.autonomia_km), pen = n(s.pendiente_grados), pot = n(s.potencia_w), mot = n(s.motores) || 1;
+// arco de 240° para los medidores
+const R = 62, L = (2 * Math.PI * R * 240) / 360;
+const gauges = [
+  vel != null && { v: vel, u: "km/h", l: "Velocidad máxima", f: vel / 100 },
+  aut != null && { v: aut, u: "km", l: "Autonomía por carga", f: aut / 120 },
+  pen != null && { v: pen + "°", u: "", l: "Pendiente máxima", f: pen / 45 },
+  pot != null && { v: mot > 1 ? `${mot}×${pot}` : pot, u: "W", l: mot > 1 ? "Un motor por rueda" : "Motor", f: mot > 1 ? 1 : pot / 1200 },
+].filter(Boolean);
+const filas = [
+  ["Motor", pot != null ? (mot > 1 ? `${mot} × ${pot} W` : `${pot} W`) + (s.potencia_pico_w ? ` (${s.potencia_pico_w} W pico)` : "") : ""],
+  ["Velocidad máxima", vel != null ? `${vel} km/h` : ""], ["Autonomía declarada", aut != null ? `${aut} km` : ""],
+  ["Batería", s.bateria], ["Neumáticos", s.neumaticos], ["Peso", s.peso_kg ? `${s.peso_kg} kg` : ""], ["Carga máxima", s.carga_max_kg ? `${s.carga_max_kg} kg` : ""],
+  ["Pendiente máxima", pen != null ? `${pen}°` : ""], ["Suspensión", s.suspension], ["Frenos", s.frenos], ["Tiempo de carga", s.tiempo_carga], ["Otros", s.extras],
+].filter((f) => f[1]);
+const destacados = [1, 2, 3].map((i) => s[`destacado${i}_titulo`] && { t: s[`destacado${i}_titulo`], x: s[`destacado${i}_texto`] }).filter(Boolean);
+const relacionados = cat.productos
+  .filter((x) => x.id !== p.id && x.seccion === p.seccion && x.tipo === p.tipo)
+  .sort((a, b) => Math.abs((a.precio || 0) - (p.precio || 0)) - Math.abs((b.precio || 0) - (p.precio || 0)))
+  .slice(0, 3);
+const veh = p.seccion === "vehiculos";
+const titulo = `${p.nombre} · ${p.precio ? dinero(p.precio) + " · " : ""}Z e-Scooters México`;
+const desc = s.tagline || `${p.nombre}: ${p.tipo.toLowerCase()} en Z e-Scooters México. Precio de lista ${dinero(p.precio)} MXN con IVA. Cotiza por WhatsApp con Z·IA.`;
+---
+<Base title={titulo} description={desc} actual="catalogo" imagen={p.foto || "/fotos/ks-n14-kse.webp"}>
+  <div class="wrap">
+    <nav class="breadcrumb" aria-label="Ruta"><a href="/catalogo/">Catálogo</a><span>/</span><a href={`/catalogo/?seccion=${p.seccion}`}>{p.tipo}</a><span>/</span><span>{p.id}</span></nav>
+    <section class="ficha-hero">
+      <div><Visual p={p} eager grande /></div>
+      <div class="meta-col">
+        <span class="kicker">{p.marca} · {p.tipo}</span>
+        <h1 class="display">{veh ? p.modelo : p.nombre}</h1>
+        {s.tagline && <p class="lead">{s.tagline}</p>}
+        <div>
+          <div class="precio-xl" data-precio={p.id}>{p.precio_tipo === "A partir de" ? "desde " : ""}{dinero(p.precio)}<small>MXN · IVA incl.</small></div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:14px">
+            <span class={`estado ${cls}`}><i></i>{txt}</span>
+            {p.existencias && <span class="tag">Corte {p.existencias.corte}{p.existencias.variantes ? ` · ${p.existencias.variantes}` : ""}</span>}
+            {p.precio_por_confirmar && <span class="tag rojo">{p.seccion === "baterias" ? "Precio del proveedor, sujeto a confirmación" : "Precio por confirmar con un asesor"}</span>}
+          </div>
+        </div>
+        <div style="display:grid;gap:10px">
+          <button class="btn btn-red" type="button" data-agregar={p.id} data-abrir>Agregar a mi cotización</button>
+          <a class="btn btn-wa" href={preguntaZIA(p)} target="_blank" rel="noopener">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20l1.4-4A8 8 0 1 1 8 18.6z"/></svg>Preguntar a Z·IA por este modelo
+          </a>
+        </div>
+        <dl class="sat">
+          <dt>Factura</dt><dd><b>CFDI 4.0 con FacturAI</b></dd>
+          {p.sat && <><dt>Clave SAT</dt><dd><b>{p.sat.clave}</b> · unidad {p.sat.unidad}</dd></>}
+          <dt>Clave Z·IA</dt><dd><b>{p.id}</b>{p.alias?.length ? ` · también «${p.alias[1] || p.alias[0]}»` : ""}</dd>
+          {veh && <><dt>Servicio</dt><dd>Taller Z-PEV con orden digital</dd></>}
+        </dl>
+      </div>
+    </section>
+  </div>
+
+  {veh && !p.specs && (
+    <section class="wrap" style="padding-top:48px">
+      <div class="aviso"><span>●</span><span>La ficha técnica de este modelo está en preparación. Z·IA o un asesor te confirman velocidad, autonomía, batería y peso; pregúntale con el botón de arriba.</span></div>
+    </section>
+  )}
+
+  {destacados.length > 0 && (
+    <section class="sec" style="padding-bottom:0">
+      <div class="wrap">
+        <h2 class="h2" data-reveal style="margin-bottom:28px">Lo mejor del {p.modelo}</h2>
+        <div class="destacados">{destacados.map((d, i) => <div data-reveal={i * .08}><span class="ix">0{i + 1}</span><b class="h3">{d.t}</b><p class="muted">{d.x}</p></div>)}</div>
+      </div>
+    </section>
+  )}
+
+  {gauges.length > 0 && (
+    <section class="sec" style="padding-bottom:0">
+      <div class="wrap">
+        <h2 class="h2" data-reveal style="margin-bottom:28px">Lo que se siente al rodarlo</h2>
+        <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><linearGradient id="gradRojo" x1="0" x2="1"><stop offset="0" stop-color="#8f130c" /><stop offset="1" stop-color="#ff4b3e" /></linearGradient></defs></svg>
+        <div class="gauges">
+          {gauges.map((g) => (
+            <div class="gauge" data-reveal>
+              <svg viewBox="0 0 160 120" aria-hidden="true">
+                <circle class="arco-f" cx="80" cy="80" r={R} fill="none" stroke-width="9" stroke-linecap="round" stroke-dasharray={`${L} 999`} transform="rotate(150 80 80)" />
+                <circle class="arco" data-arco={Math.min(1, Math.max(.06, g.f))} cx="80" cy="80" r={R} fill="none" stroke-width="9" stroke-linecap="round" stroke-dasharray={`${L * Math.min(1, Math.max(.06, g.f))} 999`} transform="rotate(150 80 80)" />
+              </svg>
+              <span class="v">{g.v}<small>{g.u}</small></span>
+              <span class="l">{g.l}</span>
+            </div>
+          ))}
+        </div>
+        {s.notas_revision && <p class="nota" style="margin-top:14px">{s.notas_revision}</p>}
+      </div>
+    </section>
+  )}
+
+  {filas.length > 0 && (
+    <section class="sec" style="padding-bottom:0">
+      <div class="wrap">
+        <h2 class="h2" data-reveal style="margin-bottom:24px">Ficha técnica</h2>
+        <dl class="tabla">{filas.map(([k, v]) => <div><dt>{k}</dt><dd>{v}</dd></div>)}</dl>
+        <p class="nota" style="margin-top:14px">Fuente: {s.fuente}. La autonomía real cambia con el peso, la velocidad, las pendientes, la temperatura y la presión de las llantas.</p>
+      </div>
+    </section>
+  )}
+
+  {relacionados.length > 0 && (
+    <section class="sec">
+      <div class="wrap">
+        <h2 class="h2" data-reveal style="margin-bottom:28px">También te puede servir</h2>
+        <div class="grid-prod">{relacionados.map((r) => <Card p={r} />)}</div>
+      </div>
+    </section>
+  )}
+  <script>
+    import { gsap, reduce } from "../../scripts/app.js";
+    if (!reduce) document.querySelectorAll(".arco").forEach((a) => {
+      const total = a.getAttribute("stroke-dasharray");
+      gsap.fromTo(a, { attr: { "stroke-dasharray": "0 999" } }, { attr: { "stroke-dasharray": total }, duration: 1.6, ease: "power3.out", scrollTrigger: { trigger: a, start: "top 88%" } });
+    });
+  </script>
+</Base>

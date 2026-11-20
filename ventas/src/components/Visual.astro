@@ -1,0 +1,15 @@
+---
+import { monograma } from "../lib/z.js";
+const { p, eager = false, grande = false } = Astro.props;
+---
+{p.foto ? (
+  <div class="visual">
+    <img src={p.foto} alt={p.nombre} loading={eager ? "eager" : "lazy"} decoding="async" width="900" height="900" fetchpriority={eager ? "high" : "auto"} />
+  </div>
+) : (
+  <div class="visual sin-foto" role="img" aria-label={`${p.nombre}: fotografía pendiente`}>
+    <span class="estela" aria-hidden="true"></span>
+    <span class="mono-grande" aria-hidden="true">{monograma(p)}</span>
+    {grande && <span class="marca-agua">{p.marca} · fotografía en preparación</span>}
+  </div>
+)}

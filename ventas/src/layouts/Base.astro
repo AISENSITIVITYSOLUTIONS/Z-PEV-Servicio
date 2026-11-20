@@ -1,0 +1,188 @@
+---
+import "@fontsource-variable/archivo/wdth-italic.css";
+import "@fontsource-variable/archivo/wdth.css";
+import "@fontsource-variable/geist";
+import "@fontsource-variable/geist-mono";
+import "../styles/global.css";
+import { CONFIG } from "../lib/z.js";
+import cat from "../data/catalogo.json";
+
+interface Props { title?: string; description?: string; actual?: string; imagen?: string; }
+const {
+  title = "Z e-Scooters México · Scooters, monociclos y motos eléctricas en CDMX",
+  description = "Scooters, monociclos y motos eléctricas KingSong, Kaabo, Langfeite, Inmotion y Nosfet. Taller propio, baterías a medida y factura CFDI 4.0. Cotiza y compra por WhatsApp con Z·IA.",
+  actual = "",
+  imagen = "/fotos/ks-n14-kse.webp",
+} = Astro.props;
+const canonical = new URL(Astro.url.pathname, Astro.site);
+const pol = cat.politicas;
+const menu = [
+  ["/catalogo/", "Catálogo", "catalogo"],
+  ["/asistente/", "Encuentra el tuyo", "asistente"],
+  ["/baterias/", "Battery Match", "baterias"],
+  ["/taller/", "Taller", "taller"],
+  ["/#ecosistema", "Cómo compras", "ecosistema"],
+];
+const schema = {
+  "@context": "https://schema.org",
+  "@type": "Store",
+  name: "Z e-Scooters México",
+  url: CONFIG.SITIO,
+  telephone: "+52 " + CONFIG.TEL_TIENDA[0],
+  address: { "@type": "PostalAddress", streetAddress: "Av. Patriotismo 176, Col. Escandón I", addressLocality: "Miguel Hidalgo, Ciudad de México", postalCode: "11800", addressCountry: "MX" },
+  openingHours: ["Mo-Fr 10:00-19:00", "Sa 10:00-15:00"],
+};
+---
+<!doctype html>
+<html lang="es-MX">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    <meta name="theme-color" content="#07080b" />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="es_MX" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:image" content={new URL(imagen, Astro.site)} />
+    <link rel="icon" href="/marca/z-mark.png" type="image/png" />
+    <script type="application/ld+json" set:html={JSON.stringify(schema)} />
+    <script is:inline>document.documentElement.classList.add(matchMedia('(prefers-reduced-motion: reduce)').matches ? 'no-motion' : 'motion');</script>
+  </head>
+  <body>
+    <a class="skip" href="#contenido">Saltar al contenido</a>
+    <header class="nav" data-nav>
+      <div class="wrap">
+        <a class="marca" href="/" aria-label="Z e-Scooters México, inicio">
+          <img src="/marca/z-mark.png" alt="" width="46" height="42" />
+          <span>e-Scooters MX<small>Z-PEV Ventas</small></span>
+        </a>
+        <nav class="menu" id="menu" aria-label="Principal">
+          {menu.map(([href, t, k]) => <a href={href} aria-current={actual === k ? "page" : undefined}>{t}</a>)}
+        </nav>
+        <div class="nav-cta">
+          <a class="btn btn-sm solo-esc" href={`https://wa.me/${CONFIG.WA_ZIA}?text=${encodeURIComponent("Hola Z·IA, quiero información.")}`} target="_blank" rel="noopener">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20l1.4-4A8 8 0 1 1 8 18.6z"/></svg>Z·IA
+          </a>
+          <button class="btn btn-sm btn-red cot-btn" type="button" data-abrir-cot aria-controls="cotizacion">
+            Mi cotización<span class="badge" data-cot-cuenta></span>
+          </button>
+          <button class="burger" type="button" aria-label="Menú" aria-expanded="false" aria-controls="menu" data-burger>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <main id="contenido"><slot /></main>
+
+    <footer class="pie">
+      <div class="wrap">
+        <div class="pie-grid">
+          <div>
+            <img src="/marca/z-logo.png" alt="Z e-Scooters MX · Personal Electric Vehicle" width="150" height="122" style="height:84px;width:auto" />
+            <p class="nota" style="margin-top:16px;max-width:38ch">Sitio de venta conectado con Z·IA (WhatsApp), FacturAI (CFDI 4.0) y Z-PEV Servicio (taller). Precios de lista en MXN con IVA incluido, tomados de la misma base que usa Z·IA.</p>
+          </div>
+          <div>
+            <h4>Compra</h4>
+            <ul>
+              <li><a href="/catalogo/">Catálogo completo</a></li>
+              <li><a href="/asistente/">Encuentra tu vehículo</a></li>
+              <li><a href="/baterias/">Battery Match</a></li>
+              <li><a href="/catalogo/?seccion=refacciones">Refacciones</a></li>
+            </ul>
+          </div>
+          <div>
+            <h4>Visítanos</h4>
+            <ul>
+              <li>{pol.direccion?.texto}</li>
+              <li>{pol.horario?.texto}</li>
+            </ul>
+          </div>
+          <div>
+            <h4>Contacto</h4>
+            <ul>
+              <li>Z·IA por WhatsApp: <span class="mono">{CONFIG.WA_ZIA_LEGIBLE}</span></li>
+              <li>Tienda: <span class="mono">{CONFIG.TEL_TIENDA.join(" · ")}</span></li>
+              <li>@zescootersmexico</li>
+            </ul>
+          </div>
+        </div>
+        <div class="legal">
+          <span>Z e-Scooters México S.A. de C.V. · RFC ZEM210611H42</span>
+          <span>Precios actualizados {new Date(cat.generado).toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" })} · Desarrollado por NNI</span>
+        </div>
+      </div>
+    </footer>
+
+    <!-- Cotización: une catálogo, Z·IA y FacturAI -->
+    <div class="cajon" id="cotizacion" data-cajon aria-hidden="true">
+      <div class="velo" data-cerrar-cot></div>
+      <aside class="hoja" role="dialog" aria-modal="true" aria-labelledby="cot-titulo">
+        <div class="hoja-head">
+          <div>
+            <h2 class="h3" id="cot-titulo">Mi cotización</h2>
+            <span class="folio" data-folio></span>
+          </div>
+          <button class="cerrar" type="button" aria-label="Cerrar" data-cerrar-cot>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+          </button>
+        </div>
+        <div class="hoja-body">
+          <div data-items></div>
+          <div class="grid-2">
+            <div class="campo"><label for="c-nombre">Tu nombre</label><input class="in" id="c-nombre" autocomplete="name" placeholder="Nombre y apellido" /></div>
+            <div class="campo"><label for="c-cp">CP de entrega</label><input class="in" id="c-cp" inputmode="numeric" maxlength="5" autocomplete="postal-code" placeholder="06700" /></div>
+          </div>
+          <p class="nota">{pol.entrega_envio?.texto}</p>
+          <label class="toggle" for="c-factura">
+            <span><b>Necesito factura CFDI 4.0</b><br /><span class="nota">La emite FacturAI con la clave SAT de cada producto. {pol.factura ? "" : ""}</span></span>
+            <input type="checkbox" id="c-factura" />
+          </label>
+          <div class="grid-2" data-fiscal hidden>
+            <div class="campo"><label for="c-rfc">RFC</label><input class="in mono" id="c-rfc" maxlength="13" autocomplete="off" placeholder="XAXX010101000" style="text-transform:uppercase" /></div>
+            <div class="campo"><label for="c-cpf">CP fiscal</label><input class="in" id="c-cpf" inputmode="numeric" maxlength="5" placeholder="11800" /></div>
+            <div class="campo" style="grid-column:1/-1"><label for="c-razon">Nombre o razón social (como en tu constancia)</label><input class="in" id="c-razon" autocomplete="organization" /></div>
+            <div class="campo"><label for="c-regimen">Régimen fiscal</label>
+              <select class="in" id="c-regimen">
+                <option value="">Elige</option>
+                <option value="601">601 · General de Ley Personas Morales</option>
+                <option value="603">603 · Personas Morales sin Fines de Lucro</option>
+                <option value="605">605 · Sueldos y Salarios</option>
+                <option value="606">606 · Arrendamiento</option>
+                <option value="612">612 · Actividades Empresariales y Profesionales</option>
+                <option value="616">616 · Sin obligaciones fiscales</option>
+                <option value="621">621 · Incorporación Fiscal</option>
+                <option value="626">626 · Régimen Simplificado de Confianza</option>
+              </select>
+            </div>
+            <div class="campo"><label for="c-uso">Uso del CFDI</label>
+              <select class="in" id="c-uso">
+                <option value="G03">G03 · Gastos en general</option>
+                <option value="G01">G01 · Adquisición de mercancías</option>
+                <option value="I08">I08 · Otra maquinaria y equipo</option>
+                <option value="S01">S01 · Sin efectos fiscales</option>
+              </select>
+            </div>
+            <div class="campo" style="grid-column:1/-1"><label for="c-correo">Correo para recibir la factura</label><input class="in" id="c-correo" type="email" autocomplete="email" /></div>
+            <p class="nota" style="grid-column:1/-1">{pol.factura?.texto}</p>
+          </div>
+          <div class="campo"><span class="lbl">Mensaje que recibirá Z·IA</span><div class="preview" data-preview></div></div>
+        </div>
+        <div class="hoja-foot">
+          <div class="total"><span class="muted">Total de lista (IVA incluido)</span><b data-total>$0</b></div>
+          <a class="btn btn-red" data-enviar target="_blank" rel="noopener" href="#">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20l1.4-4A8 8 0 1 1 8 18.6z"/></svg>
+            Enviar a Z·IA por WhatsApp
+          </a>
+          <button class="btn btn-sm" type="button" data-copiar>Copiar mensaje</button>
+          <p class="nota" data-error role="alert"></p>
+        </div>
+      </aside>
+    </div>
+    <div class="toast" data-toast role="status" aria-live="polite"></div>
+    <script>import "../scripts/app.js";</script>
+  </body>
+</html>

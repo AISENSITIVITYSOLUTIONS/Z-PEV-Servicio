@@ -1,0 +1,47 @@
+---
+import Base from "../layouts/Base.astro";
+import cat from "../data/catalogo.json";
+import { CONFIG } from "../lib/z.js";
+const pol = cat.politicas;
+const claves = ["diagnostico", "presupuesto", "anticipo_bateria", "garantia", "garantia_invalida", "ingreso_bateria", "mojado", "display", "garantia_fabricante", "respaldo", "abandono", "baterias_litio", "entrega_aviso", "pagos", "iva", "factura"];
+const motivos = ["Mantenimiento preventivo", "No enciende", "Batería no carga o dura poco", "Frenos", "Llanta ponchada", "Otro"];
+const ref = cat.productos.filter((p) => p.seccion === "refacciones").length;
+---
+<Base title="Taller multimarca · Z e-Scooters México" description="Mantenimiento y reparación de scooters, bicis y motos eléctricas con orden de servicio digital, presupuesto, anticipo y garantía de reparación. Patriotismo 176, CDMX." actual="taller">
+  <section class="wrap" style="padding-block:28px 40px">
+    <div class="sec-head split" style="margin-bottom:34px">
+      <div style="display:grid;gap:14px"><span class="kicker">Taller Z · Z-PEV Servicio</span><h1 class="h2">Tu vehículo entra con orden, firma y folio.</h1></div>
+      <p class="lead">Cada servicio se registra en Z-PEV Servicio: datos del vehículo, presupuesto, anticipo, términos firmados en pantalla y comprobante PDF que te llega por WhatsApp.</p>
+    </div>
+    <div class="bloques">
+      <div class="bloque"><span class="big">01</span><b class="h3">Agenda por WhatsApp</b><p>Elige el motivo y Z·IA te da horario. {pol.horario?.texto}</p></div>
+      <div class="bloque"><span class="big">02</span><b class="h3">Diagnóstico y presupuesto</b><p>{pol.presupuesto?.texto}</p></div>
+      <div class="bloque"><span class="big">03</span><b class="h3">Entrega y garantía</b><p>{pol.entrega_aviso?.texto} {pol.garantia?.texto}</p></div>
+    </div>
+  </section>
+  <section class="wrap" style="padding-bottom:20px">
+    <div class="panel" style="display:grid;gap:18px">
+      <span class="lbl">¿Qué le pasa a tu vehículo?</span>
+      <div class="chips" data-motivos>{motivos.map((m) => <button type="button" class="chip" data-v={m} aria-pressed="false">{m}</button>)}</div>
+      <div class="grid-2">
+        <div class="campo"><label for="t-veh">Marca y modelo</label><input class="in" id="t-veh" placeholder="Ej. Kaabo Mantis 10, Xiaomi M365" /></div>
+        <div class="campo"><label for="t-nom">Tu nombre</label><input class="in" id="t-nom" autocomplete="name" /></div>
+      </div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center"><a class="btn btn-red" data-t-wa href="#" target="_blank" rel="noopener">Agendar con Z·IA</a><span class="nota">Línea {CONFIG.WA_ZIA_LEGIBLE} · {ref} refacciones con precio en el <a class="linkx" href="/catalogo/?seccion=refacciones">catálogo</a>.</span></div>
+    </div>
+  </section>
+  <section class="sec" style="padding-top:60px">
+    <div class="wrap">
+      <div class="sec-head"><span class="kicker">Lo que firmas</span><h2 class="h2">Reglas del taller, sin letra chica.</h2><p class="lead">Son las mismas cláusulas del contrato que se firma en Z-PEV Servicio y las mismas que responde Z·IA.</p></div>
+      <div class="lista-pol">{claves.filter((k) => pol[k]).map((k) => <div><b>{pol[k].titulo}</b><p>{pol[k].texto}</p></div>)}</div>
+    </div>
+  </section>
+  <script>
+    import { CONFIG } from "../lib/z.js";
+    const $ = (s) => document.querySelector(s);
+    let motivo = "";
+    const act = () => { const t = [`Hola Z·IA, quiero agendar servicio de taller.`, motivo && `Motivo: ${motivo}`, $("#t-veh").value && `Vehículo: ${$("#t-veh").value}`, $("#t-nom").value && `Nombre: ${$("#t-nom").value}`].filter(Boolean).join("\n"); $("[data-t-wa]").href = `https://wa.me/${CONFIG.WA_ZIA}?text=${encodeURIComponent(t)}`; };
+    document.querySelectorAll("[data-motivos] button").forEach((b) => b.addEventListener("click", () => { document.querySelectorAll("[data-motivos] button").forEach((x) => x.setAttribute("aria-pressed", String(x === b))); motivo = b.dataset.v; act(); }));
+    ["#t-veh", "#t-nom"].forEach((s) => $(s).addEventListener("input", act)); act();
+  </script>
+</Base>
