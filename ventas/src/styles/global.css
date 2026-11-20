@@ -408,11 +408,14 @@ input[type="range"]::-moz-range-thumb { width: 26px; height: 26px; border-radius
 .lista-pol p { color: var(--text-2); font-size: 14.5px; }
 @media (max-width: 760px) { .lista-pol { grid-template-columns: 1fr; } }
 .cinta { overflow: hidden; border-block: 1px solid var(--line); padding-block: 22px; }
-.cinta .pista { display: flex; gap: 48px; width: max-content; animation: cinta 40s linear infinite; }
+.cinta .pista { display: flex; gap: 48px; width: max-content; animation: cinta 26s linear infinite; will-change: transform; }
+.cinta:hover .pista { animation-play-state: paused; }
 .cinta span { font: 750 clamp(26px, 3.4vw, 44px)/1 var(--display); font-stretch: 125%; font-style: italic; color: transparent; -webkit-text-stroke: 1px rgba(236, 238, 242, .28); white-space: nowrap; display: inline-flex; align-items: center; gap: 48px; }
 .cinta span::after { content: ""; width: 10px; height: 10px; background: var(--red); transform: skewX(-18deg); box-shadow: 0 0 12px var(--red-glow); }
-@keyframes cinta { to { transform: translateX(-50%); } }
-@media (prefers-reduced-motion: reduce) { .cinta .pista { animation: none; } * { scroll-behavior: auto !important; } }
+/* Dos copias de la lista: se recorre media pista más medio hueco para que el empalme no salte. */
+@keyframes cinta { to { transform: translateX(calc(-50% - 24px)); } }
+/* Con "reducir movimiento" activo en el sistema la cinta no se detiene: avanza más despacio. */
+@media (prefers-reduced-motion: reduce) { .cinta .pista { animation-duration: 70s; } * { scroll-behavior: auto !important; } }
 .breadcrumb { font: 500 12.5px/1.2 var(--mono); color: var(--muted); display: flex; gap: 8px; flex-wrap: wrap; padding-top: 20px; }
 .breadcrumb a:hover { color: var(--text); }
 
