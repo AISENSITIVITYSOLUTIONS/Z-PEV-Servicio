@@ -1,0 +1,6 @@
+producto,precio_en_lista,dato_del_asociado,accion
+WOLF KING GTR,"99,900","110,799 en sitio del asociado",Confirmar precio
+MANTIS 10 LITE,"31,900",No aparece en el sitio,Confirmar si sigue en catálogo
+S1F,"19,999","19,999 (antes 22,990, -13%); etiqueta Sold out contradictoria",Confirmar disponibilidad
+Skywalker 10C ECO 800 y 8H ECO 500,"25,900 / 17,900",Botón 'Leer más' sin precio de compra,Confirmar si tienen stock
+MANTIS KING GT,"56,900","55,900 – 56,900 con variantes",Confirmar precio base

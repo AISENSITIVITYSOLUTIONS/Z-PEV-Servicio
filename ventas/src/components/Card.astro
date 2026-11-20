@@ -1,0 +1,23 @@
+---
+import Visual from "./Visual.astro";
+import { dinero, estadoClase } from "../lib/z.js";
+const { p, comparar = false } = Astro.props;
+const [cls, txt] = estadoClase(p);
+const s = p.specs;
+---
+<article class="card" data-id={p.id}>
+  <Visual p={p} />
+  {comparar && p.seccion === "vehiculos" && <label class="chk"><input type="checkbox" data-comparar={p.id} /> Comparar</label>}
+  <div class="info">
+    <span class="tipo">{p.marca} · {p.tipo}</span>
+    <a class="nom cubre" href={`/modelo/${p.slug}/`}>{p.seccion === "vehiculos" ? p.modelo : p.nombre}</a>
+    {s && <div class="specs-mini">{s.velocidad_kmh && <span>{s.velocidad_kmh} km/h</span>}{s.autonomia_km && <span>{s.autonomia_km} km</span>}{s.potencia_w && <span>{s.motores > 1 ? `${s.motores}×` : ""}{s.potencia_w} W</span>}</div>}
+    <div class="fila">
+      <span class="precio" data-precio={p.id}>{p.precio_tipo === "A partir de" ? "desde " : ""}{dinero(p.precio)}</span>
+      <span class={`estado ${cls}`}><i></i>{txt}</span>
+    </div>
+  </div>
+  <div class="acciones">
+    <button class="btn btn-sm" type="button" data-agregar={p.id}>Cotizar</button>
+  </div>
+</article>

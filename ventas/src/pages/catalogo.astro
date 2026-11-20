@@ -1,0 +1,100 @@
+---
+import Base from "../layouts/Base.astro";
+import Card from "../components/Card.astro";
+import cat from "../data/catalogo.json";
+
+const P = cat.productos;
+const SECC = [["vehiculos", "Vehículos"], ["baterias", "Baterías"], ["refacciones", "Refacciones"]];
+const valores = (sec, k) => [...new Set(P.filter((p) => p.seccion === sec).map((p) => p[k]))].sort((a, b) => a.localeCompare(b, "es"));
+const estadoDe = (p) => (p.sin_existencias ? "Sin existencias" : p.estado);
+const orden = { vehiculos: 0, baterias: 1, refacciones: 2 };
+const lista = [...P].sort((a, b) => orden[a.seccion] - orden[b.seccion] || (a.precio || 0) - (b.precio || 0));
+---
+<Base title="Catálogo · Z e-Scooters México" description={`Los ${P.length} productos de Z e-Scooters México con precio vigente: scooters, monociclos, motos, baterías y refacciones.`} actual="catalogo">
+  <section class="wrap" style="padding-block:28px 100px">
+    <div class="sec-head split" style="margin-bottom:28px">
+      <div style="display:grid;gap:14px">
+        <span class="kicker">Catálogo · {P.length} productos</span>
+        <h1 class="h2">Elige, compara y cotiza.</h1>
+      </div>
+      <p class="lead">Mismos precios que Z·IA. Marca hasta tres vehículos para compararlos lado a lado.</p>
+    </div>
+
+    <div class="barra-res">
+      <div class="tabs" role="tablist" aria-label="Sección">
+        {SECC.map(([k, t], i) => <button role="tab" type="button" data-seccion={k} aria-selected={i === 0 ? "true" : "false"}>{t} <span class="mono muted">{P.filter((p) => p.seccion === k).length}</span></button>)}
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <button class="btn btn-sm filtros-movil" type="button" data-ver-filtros aria-expanded="false" aria-controls="filtros">Filtros</button>
+        <span class="mono muted" data-conteo style="font-size:13px"></span>
+        <select class="in" id="orden" aria-label="Ordenar" style="width:auto;min-height:40px">
+          <option value="precio-asc">Precio: menor a mayor</option>
+          <option value="precio-desc">Precio: mayor a menor</option>
+          <option value="nombre">Nombre</option>
+          <option value="existencia">Primero con existencias</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="cat-layout">
+      <aside class="filtros" id="filtros" aria-label="Filtros">
+        <div class="grupo">
+          <label class="lbl" for="q">Buscar</label>
+          <input class="in" id="q" type="search" placeholder="N14, Mantis, 48v, llanta…" autocomplete="off" />
+        </div>
+        <div class="grupo">
+          <span class="lbl">Precio</span>
+          <div class="chips" data-rangos>
+            <button type="button" class="chip" data-r="0-20000" aria-pressed="false">Hasta $20 mil</button>
+            <button type="button" class="chip" data-r="20000-45000" aria-pressed="false">$20–45 mil</button>
+            <button type="button" class="chip" data-r="45000-" aria-pressed="false">Más de $45 mil</button>
+          </div>
+          <div class="grid-2" style="gap:8px"><input class="in" id="pmin" type="number" inputmode="numeric" placeholder="Mínimo" min="0" aria-label="Precio mínimo" /><input class="in" id="pmax" type="number" inputmode="numeric" placeholder="Máximo" min="0" aria-label="Precio máximo" /></div>
+        </div>
+        {SECC.map(([sec], i) => (
+          <div data-solo={sec} hidden={i !== 0}>
+            <div class="grupo" style="margin-bottom:22px"><span class="lbl">Tipo</span>
+              {valores(sec, "tipo").map((v) => <label class="op"><input type="checkbox" data-f="tipo" value={v} />{v}<span class="c" data-c={`tipo|${v}`}></span></label>)}</div>
+            <div class="grupo"><span class="lbl">Marca</span>
+              {valores(sec, "marca").map((v) => <label class="op"><input type="checkbox" data-f="marca" value={v} />{v}<span class="c" data-c={`marca|${v}`}></span></label>)}</div>
+          </div>
+        ))}
+        <div class="grupo"><span class="lbl">Disponibilidad</span>
+          {["Disponible", "Pre orden", "Sobre pedido", "Por verificar", "Agotado", "Sin existencias"].map((v) => <label class="op"><input type="checkbox" data-f="estado" value={v} />{v}<span class="c" data-c={`estado|${v}`}></span></label>)}
+        </div>
+        <button class="btn btn-sm" type="button" data-limpiar>Limpiar filtros</button>
+      </aside>
+
+      <div>
+        <div class="grid-prod" data-grid>
+          {lista.map((p) => (
+            <div class="it" style="display:contents" data-id={p.id} data-seccion={p.seccion} data-tipo={p.tipo} data-marca={p.marca} data-estado={estadoDe(p)} data-precio={p.precio ?? ""} data-exist={p.existencias?.unidades ?? 0}
+              data-texto={`${p.nombre} ${p.marca} ${p.tipo} ${p.compatibilidad || ""} ${p.id}`.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")}
+              hidden={p.seccion !== "vehiculos"}>
+              <Card p={p} comparar={true} />
+            </div>
+          ))}
+        </div>
+        <div class="panel" data-vacio hidden style="text-align:center;margin-top:10px">
+          <p class="h3">Ningún producto cumple esos filtros.</p>
+          <p class="nota" style="margin-top:8px">Quita alguno, o pregúntale a Z·IA: conoce todo el catálogo.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="bandeja" data-bandeja>
+    <span data-bandeja-txt>0 de 3 para comparar</span>
+    <button class="btn btn-sm btn-red" type="button" data-ver-comp>Comparar</button>
+  </div>
+  <dialog class="comp" data-comp aria-labelledby="comp-t">
+    <div class="comp-in">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px">
+        <h2 class="h3" id="comp-t">Comparador</h2>
+        <button class="cerrar" type="button" aria-label="Cerrar" data-cerrar-comp><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
+      <div class="scroll-x" data-comp-tabla></div>
+    </div>
+  </dialog>
+  <script>import "../scripts/catalogo.js";</script>
+</Base>

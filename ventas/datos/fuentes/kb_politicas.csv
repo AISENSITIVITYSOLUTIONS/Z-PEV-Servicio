@@ -1,0 +1,26 @@
+clave,titulo,texto_para_el_bot,fuente
+horario,Horario de atención,Lunes a viernes 10:00–19:00; sábados 10:00–15:00.,"Contrato, cláusula primera"
+direccion,Domicilio,"Av. Patriotismo 176, Col. Escandón I, Miguel Hidalgo, C.P. 11800, CDMX.",Datos del emisor
+contacto,Teléfonos de consulta,55 6501 8583 y 55 4497 8500.,Datos del emisor
+razon_social,Razón social y RFC,"Z e-Scooters México S.A. de C.V., RFC ZEM210611H42.",Datos del emisor
+redes,Redes,"@zescootersmexico, @langfeite.mexico, @kinsongmexico; www.zescootersmx.com",Datos del emisor
+diagnostico,Costo de diagnóstico,"Si el cliente no acepta la reparación tras el diagnóstico, se cobra $500 + IVA y se devuelve el vehículo.","Contrato, cláusula quinta"
+anticipo_bateria,Anticipo en servicio a batería,50% del precio establecido como anticipo.,"Contrato, cláusula segunda"
+presupuesto,Naturaleza del presupuesto,El costo del presupuesto es aproximado; el monto exacto sale de la revisión física. Debe decirse en cada cifra de taller.,"Contrato, cláusula segunda"
+garantia,Garantía de reparación,"7 días naturales desde la entrega. No aplica en llantas ni cámaras una vez reparadas, reemplazadas o montadas. En equipos mojados solo se garantiza la pieza reemplazada.","Contrato, cláusula quinta"
+garantia_invalida,Cuándo no aplica la garantía,"Uso en condiciones distintas a las normales; golpes, fracturas o daños no imputables al prestador; intervención posterior por un tercero.","Contrato, cláusula quinta"
+iva,IVA,"Servicios, reparaciones, materiales, partes, repuestos y consumibles no llevan IVA; si se requiere factura se cobra el 16%.","Contrato, cláusula sexta"
+factura,Plazo para pedir factura,El consumidor debe solicitarla en la misma semana del servicio.,"Contrato, cláusula décima séptima"
+pagos,Formas de pago,"Moneda nacional. Mastercard, Visa, American Express, transferencia y depósito, siempre que se confirme el pago.","Contrato, cláusula segunda"
+abandono,Recolección del vehículo,No hay bodega de almacenamiento. Pasados 7 días naturales de la fecha de entrega el prestador no responde por daños; a los 30 días naturales el vehículo pasa a retiro y puede entregarse a desecho.,"Contrato, cláusula séptima"
+baterias_litio,Baterías de litio no recolectadas,Z no conserva baterías de litio de vehículos no recolectados y realiza su disposición. Es responsabilidad del usuario llevarse su batería.,"Contrato, cláusula cuarta"
+display,Riesgo al retirar tapa de display,En algunos modelos la tapa del display está pegada y suele romperse al retirarla; se informa antes de intervenir.,"Contrato, cláusula décima"
+mojado,Vehículo mojado,Se cobra el servicio de secado y se pide autorización del consumidor para reparar.,"Contrato, cláusula décima primera"
+ingreso_bateria,Vehículo debe encender al ingresar,"Si ingresa apagado, las fallas se diagnostican como eléctricas (batería, controladoras, arneses, cableado, display) y Z no asume responsabilidad de encontrarlas.","Contrato, cláusula décima quinta"
+garantia_fabricante,Garantía del fabricante,Intervenir un equipo con garantía vigente de fábrica puede invalidarla; el consumidor asume ese riesgo.,"Contrato, cláusula décima tercera"
+respaldo,Configuración del vehículo,El consumidor debe respaldar la configuración antes de ingresar; Z no responde por su pérdida.,"Contrato, cláusula décima cuarta"
+entrega_aviso,Aviso de entrega,La entrega se avisa por mensaje de WhatsApp o llamada al concluir el servicio.,"Contrato, cláusula tercera"
+privacidad,Aviso de privacidad,"Publicado en www.zescootersmx.com, conforme a la LFPDPPP.","Contrato, cláusula décima novena"
+profeco,Instancia de controversia,La Profeco es competente en vía administrativa; las partes se someten a tribunales de la CDMX.,"Contrato, cláusula final"
+logistica_nogales,Logística almacén Nogales,Liberar mercancía tarda 2 días; retirar mercancía comprada o pagada requiere autorización de China; disponible para entrega 5 días después del pago.,Nota operativa
+entrega_envio,Modalidad de entrega,Solo envío a domicilio. No hay recolección en tienda para compras al momento.,Nota operativa
