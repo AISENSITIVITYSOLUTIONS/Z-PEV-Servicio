@@ -114,3 +114,9 @@ En **Historial**, el ícono de documento (o el folio) abre la nota de cualquier 
 ## Etiqueta interna con QR
 
 El botón **Etiqueta** (en la confirmación y en la nota del Historial) imprime una etiqueta de 100 × 70 mm para pegar en el vehículo. Lleva el folio grande, la foto, el cliente, el vehículo, el servicio, la fecha y un QR. El QR abre la app en `/?folio=ZPEV-26-0001`, que muestra la nota de esa orden; para verla hay que tener sesión iniciada. Funciona con impresoras de etiquetas o con hoja normal.
+
+## Sitio de ventas
+
+El sitio de venta (Z-PEV Ventas) ya no vive en este repositorio. Tiene repositorio y proyecto
+de Firebase propios: `AISENSITIVITYSOLUTIONS/App-Z-pev-ventas`, proyecto `app-z-pev-ventas`,
+publicado en https://app-z-pev-ventas.web.app.
