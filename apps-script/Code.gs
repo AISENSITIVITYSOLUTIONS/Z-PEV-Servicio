@@ -135,9 +135,14 @@ function doPost(e) {
     const problem = validate_(data);
     if (problem) return json_({ ok: false, error: problem });
 
-    lock.waitLock(20000);
+    lock.waitLock(30000);
 
-    // Idempotencia: un reintento desde la cola del teléfono no duplica la orden.
+    // Idempotencia: cada captura reserva su folio en las propiedades del script ANTES de guardar
+    // firma y fotos (que tardan). Un reintento con el mismo ID de captura recibe ese mismo folio,
+    // aunque la fila todavía no se haya escrito en la hoja.
+    const claimKey = data.clientId ? 'CID_' + String(data.clientId).slice(0, 64) : '';
+    const claimed = claimKey ? props.getProperty(claimKey) : '';
+    if (claimed) return json_({ ok: true, folio: claimed.split('|')[0], duplicate: true, monthCount: monthCount_(sheet) });
     const existing = findByClientId_(sheet, data.clientId);
     if (existing) return json_({ ok: true, folio: existing, duplicate: true, monthCount: monthCount_(sheet) });
     const same = findRecentSame_(sheet, data);
@@ -145,6 +150,12 @@ function doPost(e) {
     if (same) return json_({ ok: true, folio: same, duplicate: true, skipPhotos: true, monthCount: monthCount_(sheet) });
 
     const folio = nextFolio_(sheet);
+    if (claimKey) {
+      props.setProperty(claimKey, folio + '|' + Date.now());
+      pruneClaims_(props);
+    }
+    // Folio reservado: se libera el candado para no frenar otras capturas mientras se guardan firma y fotos.
+    lock.releaseLock();
     const firmaUrl = saveSignature_(props.getProperty('DRIVE_FOLDER_ID'), folio, data.firmaPng);
     const row = new Array(HEADERS.length).fill('');
     const set = (h, v) => { row[COL[h]] = v; };
@@ -253,6 +264,62 @@ function findByClientId_(sheet, clientId) {
     if (ids[i][0] === clientId) return sheet.getRange(i + 2, 1).getValue();
   }
   return '';
+}
+
+/** Borra reservas de captura con más de 3 días (el reintento de la cola ocurre en minutos u horas). */
+function pruneClaims_(props) {
+  if (Math.random() > 0.1) return;
+  const all = props.getProperties();
+  const limit = Date.now() - 3 * 24 * 3600 * 1000;
+  Object.keys(all).forEach(function (k) {
+    if (k.indexOf('CID_') !== 0) return;
+    const at = Number(String(all[k]).split('|')[1]);
+    if (!at || at < limit) props.deleteProperty(k);
+  });
+}
+
+/**
+ * Limpieza única de órdenes ya duplicadas: filas con el mismo «ID de captura».
+ * Conserva la que tiene más fotos (o la primera) y mueve las demás a «Órdenes eliminadas».
+ * Ejecutar a mano desde el editor de Apps Script: función limpiarDuplicados → Ejecutar.
+ */
+function limpiarDuplicados() {
+  const props = PropertiesService.getScriptProperties();
+  const sheet = getSheet_(props.getProperty('SHEET_ID'));
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const last = sheet.getLastRow();
+    if (last < 2) return 'Sin órdenes.';
+    const rows = sheet.getRange(2, 1, last - 1, HEADERS.length).getValues();
+    const groups = {};
+    rows.forEach(function (r, i) {
+      const id = String(r[COL['ID de captura']] || '');
+      if (id) (groups[id] = groups[id] || []).push({ i: i, r: r });
+    });
+    const toDelete = [];
+    Object.keys(groups).forEach(function (id) {
+      const g = groups[id];
+      if (g.length < 2) return;
+      let keep = g[0];
+      g.forEach(function (x) { if (num_(x.r[COL['N.º de fotos']]) > num_(keep.r[COL['N.º de fotos']])) keep = x; });
+      g.forEach(function (x) { if (x !== keep) toDelete.push({ i: x.i, r: x.r, keep: keep.r[COL['Folio']] }); });
+    });
+    toDelete.sort(function (a, b) { return b.i - a.i; });
+    const del = deletedSheet_(sheet);
+    toDelete.forEach(function (x) {
+      del.appendRow(x.r.concat(['sistema', new Date(), 'Duplicado automático de ' + x.keep]));
+      sheet.deleteRow(x.i + 2);
+    });
+    SpreadsheetApp.flush();
+    const msg = toDelete.length
+      ? 'Movidas a «Órdenes eliminadas»: ' + toDelete.map(function (x) { return x.r[COL['Folio']] + ' (dup. de ' + x.keep + ')'; }).join(', ')
+      : 'No hay órdenes duplicadas.';
+    Logger.log(msg);
+    return msg;
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 /**
@@ -991,7 +1058,13 @@ function savePhoto_(rootId, folio, slot, label, dataUrl) {
 function addPhoto_(sheet, data, props) {
   if (!FOLIO_RE.test(String(data.folio || ''))) return { ok: false, error: 'Folio inválido.' };
   if (!isJpeg_(data.dataUrl)) return { ok: false, error: 'La foto no es válida o es demasiado grande.' };
-  const r = orderRow_(sheet, data.folio);
+  let r = orderRow_(sheet, data.folio);
+  // La orden puede seguir guardándose (folio ya reservado, fila aún no escrita): se espera hasta 20 s.
+  for (let i = 0; !r && i < 10 && data.clientId && String(props.getProperty('CID_' + data.clientId) || '').split('|')[0] === data.folio; i++) {
+    Utilities.sleep(2000);
+    SpreadsheetApp.flush();
+    r = orderRow_(sheet, data.folio);
+  }
   if (!r) return { ok: false, error: 'Folio no encontrado.' };
   const capturedId = sheet.getRange(r, COL['ID de captura'] + 1).getValue();
   if (capturedId && data.clientId !== capturedId) return { ok: false, error: 'La foto no corresponde a esta orden.' };
