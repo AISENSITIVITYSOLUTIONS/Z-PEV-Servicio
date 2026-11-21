@@ -7,7 +7,7 @@ import { enqueue, listPending, removePending, updatePending, newClientId, reques
 import { mountPhotos } from './photos.js';
 import { renderTag, printTag } from './tag.js';
 import { renderNote, noteToPdf, canvasToBlob, shareNote, noteFileName } from './note.js';
-import { API_URL, PAYMENTS_ENABLED, APLAZO_ENABLED, uploadPhoto, getOrderDetail, createOrder, listOrders, addPayment, setPaymentPlan, completeOrder, deleteOrder, createPaymentLink, createAplazoLink, cancelAplazoLink, sendNoteWhatsApp } from './api.js';
+import { API_URL, PAYMENTS_ENABLED, APLAZO_ENABLED, uploadPhoto, getOrderDetail, updateOrder, createOrder, listOrders, addPayment, setPaymentPlan, completeOrder, deleteOrder, createPaymentLink, createAplazoLink, cancelAplazoLink, sendNoteWhatsApp } from './api.js';
 import { initPWA } from './pwa.js';
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
@@ -1037,7 +1037,7 @@ function noteDataFromOrder(o) {
 }
 
 const noteView = $('#noteView');
-function setNoteButtons(on) { ['#noteShare', '#notePdf', '#notePng', '#noteTag'].forEach((id) => { $(id).disabled = !on; }); }
+function setNoteButtons(on) { ['#noteShare', '#notePdf', '#notePng', '#noteTag', '#noteEdit'].forEach((id) => { $(id).disabled = !on; }); }
 
 function openNoteShell(title) {
   $('#noteTitle').textContent = title;
@@ -1055,6 +1055,7 @@ async function showNote(data) {
   const img = Object.assign(document.createElement('img'), { src: canvas.toDataURL('image/png'), alt: `Nota de servicio ${data.folio}` });
   $('#noteBody').replaceChildren(img);
   $('#noteTitle').textContent = data.folio;
+  $('#noteEdit').hidden = !data.estatus || data.estatus === 'Completada';
   if (data.fotosUrl) { $('#notePhotos').href = data.fotosUrl; $('#notePhotos').hidden = false; }
   setNoteButtons(true);
 }
@@ -1082,7 +1083,99 @@ async function openNoteForFolio(folio) {
   }
 }
 
-function closeNote() { noteView.classList.remove('is-in'); noteView.hidden = true; }
+// ----- Editar la orden desde su ficha -----
+const EDIT_FIELDS = [
+  ['nombre', 'Cliente', 'text'], ['telefono', 'Teléfono', 'tel'], ['marca', 'Marca y modelo', 'text'],
+  ['serie', 'N° de serie', 'text'], ['encendido', 'Encendido', 'yesno'], ['servicio', 'Servicio solicitado', 'area'],
+  ['caracteristicas', 'Estado al recibir', 'area'], ['llaves', 'Llaves o NFC', 'text'], ['cargador', 'Cargador', 'text'],
+  ['otros', 'Otros accesorios', 'text'], ['presupuesto', 'Costo presupuesto (informativo)', 'money'],
+  ['anticipo', 'Anticipo', 'money'], ['factura', '¿Requiere factura? (+16 % IVA)', 'yesno']
+];
+
+function openEdit() {
+  if (!noteCurrent) return;
+  const d = noteCurrent.data;
+  const form = document.createElement('form');
+  form.className = 'edit-form';
+  form.noValidate = true;
+  const yes = (v) => v === 'Sí' || v === 'si' || v === true;
+  EDIT_FIELDS.forEach(([k, label, type]) => {
+    const wrap = document.createElement('label');
+    wrap.className = `ef ef-${type}`;
+    wrap.append(Object.assign(document.createElement('span'), { textContent: label }));
+    let input;
+    if (type === 'area') input = Object.assign(document.createElement('textarea'), { rows: 2, value: d[k] || '' });
+    else if (type === 'yesno') {
+      input = document.createElement('select');
+      ['No', 'Sí'].forEach((o) => input.append(new Option(o, o, false, yes(d[k]) ? o === 'Sí' : o === 'No')));
+    } else {
+      input = Object.assign(document.createElement('input'), {
+        type: type === 'money' ? 'number' : type === 'tel' ? 'tel' : 'text',
+        value: type === 'money' ? (Number(d[k]) || 0).toFixed(2) : (d[k] || '')
+      });
+      if (type === 'money') { input.min = '0'; input.step = '0.01'; input.inputMode = 'decimal'; }
+      if (type === 'tel') { input.inputMode = 'numeric'; input.maxLength = 10; }
+    }
+    input.name = k;
+    input.className = 'input' + (type === 'money' || type === 'tel' ? ' mono' : '');
+    wrap.append(input);
+    form.append(wrap);
+  });
+  const total = Object.assign(document.createElement('p'), { className: 'ef-total mono' });
+  const calc = () => {
+    const a = Math.max(num(form.anticipo.value), 0);
+    const iva = form.factura.value === 'Sí' ? Math.round(a * 16) / 100 : 0;
+    total.textContent = `Total a pagar: ${fmtMXN(a + iva)}${iva ? ` (incluye IVA ${fmtMXN(iva)})` : ''}`;
+  };
+  form.addEventListener('input', calc);
+  calc();
+  form.append(total, Object.assign(document.createElement('p'), {
+    className: 'ef-hint',
+    textContent: 'Folio, fecha, hora, firma y fotos no cambian. Cada corrección queda registrada en la hoja «Cambios».'
+  }));
+  const bar = document.createElement('div');
+  bar.className = 'ef-bar';
+  const cancel = Object.assign(document.createElement('button'), { type: 'button', className: 'ghost', textContent: 'Regresar' });
+  const save = Object.assign(document.createElement('button'), { type: 'submit', className: 'note-share', textContent: 'Guardar cambios' });
+  bar.append(cancel, save);
+  form.append(bar);
+  cancel.addEventListener('click', () => { noteView.classList.remove('is-editing'); $('#noteBody').replaceChildren(Object.assign(document.createElement('img'), { src: noteCurrent.canvas.toDataURL('image/png'), alt: `Nota ${d.folio}` })); setNoteButtons(true); });
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const changes = {};
+    EDIT_FIELDS.forEach(([k, , type]) => {
+      let v = form[k].value;
+      if (type === 'tel') v = digits(v);
+      if (type === 'money') v = num(v);
+      const old = type === 'money' ? num(d[k]) : type === 'yesno' ? (yes(d[k]) ? 'Sí' : 'No') : String(d[k] ?? '');
+      if (String(v).trim() !== String(old).trim()) changes[k] = typeof v === 'string' ? v.trim() : v;
+    });
+    if (!Object.keys(changes).length) { cancel.click(); return; }
+    if ('telefono' in changes && changes.telefono.length !== 10) { toast('El teléfono debe tener 10 dígitos.', 'error'); return; }
+    session = getSession();
+    if (!navigator.onLine || !session) { toast(!navigator.onLine ? 'Sin conexión: no se puede guardar.' : 'Inicia sesión para guardar.', 'error'); return; }
+    save.disabled = true;
+    save.textContent = 'Guardando…';
+    try {
+      const res = await updateOrder(session.token, d.folio, changes);
+      toast(res.changed ? `Orden ${d.folio} actualizada (${res.changed} ${res.changed === 1 ? 'cambio' : 'cambios'}).` : 'Sin cambios.', 'ok');
+      noteView.classList.remove('is-editing');
+      await openNoteForFolio(d.folio);
+      loadHistory();
+    } catch (err) {
+      toast(`No se pudo guardar: ${err.message}`, 'error');
+      save.disabled = false;
+      save.textContent = 'Guardar cambios';
+    }
+  });
+  $('#noteBody').replaceChildren(form);
+  noteView.classList.add('is-editing');
+  setNoteButtons(false);
+  form.nombre.focus();
+}
+$('#noteEdit').addEventListener('click', openEdit);
+
+function closeNote() { noteView.classList.remove('is-in', 'is-editing'); noteView.hidden = true; }
 $('#noteClose').addEventListener('click', closeNote);
 noteView.addEventListener('click', (e) => { if (e.target === noteView) closeNote(); });
 

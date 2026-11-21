@@ -125,6 +125,10 @@ function doPost(e) {
       return json_(completeOrder_(sheet, data, email));
     }
     if (action === 'detail') return json_(orderDetail_(sheet, data));
+    if (action === 'updateOrder') {
+      lock.waitLock(30000);
+      return json_(updateOrder_(sheet, data, email));
+    }
     if (action === 'sendNote') return json_(sendNoteWhatsApp_(data, props, email));
     if (action === 'photo') {
       lock.waitLock(20000);
@@ -1006,6 +1010,80 @@ function orderDetail_(sheet, data) {
       fotoUrl: driveDataUrl_(g('Foto principal'), 'image/jpeg')
     }
   };
+}
+
+/* ---------- Editar una orden registrada ---------- */
+
+// Campos que el personal puede corregir. Folio, fecha, hora, firma, términos y fotos no se editan.
+const EDITABLE = [
+  ['nombre', 'Cliente', 120], ['telefono', 'Teléfono', 10], ['marca', 'Marca y modelo', 120],
+  ['serie', 'N° de serie', 80], ['encendido', 'Encendido', 3], ['servicio', 'Descripción del servicio', 2000],
+  ['caracteristicas', 'Características generales', 2000], ['llaves', 'Llaves o NFC', 120],
+  ['cargador', 'Cargador', 120], ['otros', 'Otros accesorios', 200],
+  ['presupuesto', 'Costo presupuesto (MXN)'], ['anticipo', 'Anticipo (MXN)'], ['factura', 'Requiere factura']
+];
+const CHANGES_SHEET = 'Cambios';
+
+function changesSheet_(sheet) {
+  const ss = sheet.getParent();
+  let c = ss.getSheetByName(CHANGES_SHEET);
+  if (!c) {
+    c = ss.insertSheet(CHANGES_SHEET);
+    c.appendRow(['Folio', 'Fecha', 'Editado por', 'Campo', 'Antes', 'Después']);
+    c.setFrozenRows(1);
+    c.getRange(1, 1, 1, 6).setFontWeight('bold').setBackground('#0F1115').setFontColor('#D9F84A');
+    c.getRange(2, 2, c.getMaxRows() - 1, 1).setNumberFormat('dd/mm/yyyy hh:mm');
+  }
+  return c;
+}
+
+/** Corrige datos de una orden. Recalcula total y saldo, y registra cada cambio en la hoja «Cambios». */
+function updateOrder_(sheet, data, email) {
+  const r = orderRow_(sheet, data.folio);
+  if (!r) return { ok: false, error: 'Folio no encontrado.' };
+  const range = sheet.getRange(r, 1, 1, HEADERS.length);
+  const v = range.getValues()[0];
+  if (v[COL['Estatus']] === 'Completada') return { ok: false, error: 'La orden ya se entregó; no se puede editar.' };
+  const c = data.changes || {};
+  const next = {};
+  EDITABLE.forEach(function (f) {
+    if (!(f[0] in c)) return;
+    let val = c[f[0]];
+    if (f[0] === 'presupuesto' || f[0] === 'anticipo') val = r2_(Math.max(num_(val), 0));
+    else if (f[0] === 'telefono') val = String(val || '').replace(/\D/g, '');
+    else if (f[0] === 'encendido' || f[0] === 'factura') val = val === 'Sí' ? 'Sí' : 'No';
+    else val = clip_(String(val == null ? '' : val).trim(), f[2]);
+    next[f[1]] = val;
+  });
+  if ('Cliente' in next && next['Cliente'].length < 3) return { ok: false, error: 'Falta el nombre del cliente.' };
+  if ('Teléfono' in next && !/^\d{10}$/.test(next['Teléfono'])) return { ok: false, error: 'El teléfono debe tener 10 dígitos.' };
+  if ('Marca y modelo' in next && !next['Marca y modelo']) return { ok: false, error: 'Falta la marca y modelo.' };
+  if ('Descripción del servicio' in next && !next['Descripción del servicio']) return { ok: false, error: 'Falta la descripción del servicio.' };
+
+  const before = function (h) { return h === 'Teléfono' ? String(v[COL[h]]).replace(/^'/, '') : v[COL[h]]; };
+  const log = [];
+  const now = new Date();
+  Object.keys(next).forEach(function (h) {
+    const old = before(h);
+    const same = typeof next[h] === 'number' ? num_(old) === next[h] : String(old == null ? '' : old) === String(next[h]);
+    if (same) return;
+    log.push([data.folio, now, email, h, old, next[h]]);
+    v[COL[h]] = h === 'Teléfono' ? "'" + next[h] : next[h];
+  });
+  if (!log.length) return { ok: true, folio: data.folio, changed: 0 };
+
+  // Cobro: total = anticipo + IVA (si requiere factura); saldo = total − pagos registrados.
+  const t = totals_(v[COL['Anticipo (MXN)']], v[COL['Requiere factura']] === 'Sí');
+  v[COL['IVA (MXN)']] = t.iva;
+  v[COL['Total (MXN)']] = t.total;
+  v[COL['Saldo pendiente (MXN)']] = Math.max(r2_(t.total - num_(v[COL['Abonos (MXN)']])), 0);
+  if (t.anticipo > 0 && !v[COL['Pago anticipo']]) v[COL['Pago anticipo']] = 'Pendiente';
+  // Solo se reescriben las celdas que cambiaron o que dependen del cobro.
+  const touched = log.map(function (l) { return l[3]; }).concat(['IVA (MXN)', 'Total (MXN)', 'Saldo pendiente (MXN)', 'Pago anticipo']);
+  touched.forEach(function (h) { sheet.getRange(r, COL[h] + 1).setValue(v[COL[h]]); });
+  changesSheet_(sheet).getRange(changesSheet_(sheet).getLastRow() + 1, 1, log.length, 6).setValues(log);
+  SpreadsheetApp.flush();
+  return { ok: true, folio: data.folio, changed: log.length, total: t.total, saldo: v[COL['Saldo pendiente (MXN)']] };
 }
 
 /* ---------- Fotos del vehículo ---------- */

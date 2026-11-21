@@ -38,6 +38,10 @@ export function uploadPhoto(idToken, { folio, clientId, slot, label, dataUrl }) 
   return postSheets({ action: 'photo', idToken, folio, clientId, slot, label, dataUrl }, 60000);
 }
 
+export function updateOrder(idToken, folio, changes) {
+  return postSheets({ action: 'updateOrder', idToken, folio, changes }, 45000);
+}
+
 export function getOrderDetail(idToken, folio) {
   return postSheets({ action: 'detail', idToken, folio }, 45000);
 }
